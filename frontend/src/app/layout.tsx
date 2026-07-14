@@ -1,19 +1,19 @@
 import type { Metadata } from 'next';
-import { Space_Grotesk, DM_Sans, JetBrains_Mono } from 'next/font/google';
+import { DM_Serif_Display, DM_Sans, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
 
-const spaceGrotesk = Space_Grotesk({ subsets: ['latin'], variable: '--font-display' });
+const dmSerif = DM_Serif_Display({ subsets: ['latin'], weight: '400', variable: '--font-display', style: ['normal', 'italic'] });
 const dmSans = DM_Sans({ subsets: ['latin'], variable: '--font-body' });
 const jetbrainsMono = JetBrains_Mono({ subsets: ['latin'], variable: '--font-mono' });
 
 export const metadata: Metadata = {
   title: 'CreatorForge OS — The Agentic Operating System for Creators',
-  description: 'A multi-agent operating system that runs the operational spine of a creator business — deals, content, finance, and memory.',
+  description: 'A multi-agent operating system that runs the operational spine of a creator business — 12 agents, 8 platforms, autonomous execution.',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${spaceGrotesk.variable} ${dmSans.variable} ${jetbrainsMono.variable}`}>
+    <html lang="en" className={`${dmSerif.variable} ${dmSans.variable} ${jetbrainsMono.variable}`}>
       <body>{children}</body>
     </html>
   );

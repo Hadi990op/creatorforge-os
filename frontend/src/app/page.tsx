@@ -2,7 +2,10 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { fetchAPI } from '@/lib/api';
-import { Badge } from '@/components/ui/badge';
+
+// ═══════════════════════════════════════
+// TYPES & CONSTANTS
+// ═══════════════════════════════════════
 
 interface DashboardData {
   needs_onboarding?: boolean;
@@ -38,46 +41,51 @@ const PROVIDER_INFO: Record<string, { label: string; signupUrl: string; descript
   'llm7-free': { label: 'LLM7 (Free)', signupUrl: '', description: 'No key needed — always available', free: true },
 };
 
-const AGENT_ICONS: Record<string, string> = {
-  deal_agent: '🤝',
-  content_agent: '✍️',
-  finance_agent: '💰',
-  memory_agent: '🧠',
-  system: '⚙️',
+const PHASE_ICONS: Record<string, string> = {
+  data_gathering: '📥', context_loading: '🧠', ai_analysis: '🤖',
+  ai_writing: '🤖', ai_generating: '🤖', ai_calling: '⌛',
+  strategy: '🎨', pattern_mining: '🔍', result: '\u2705',
+  planning: '🧠', plan_ready: '📋', tool_call: '🔧',
+  tool_result: '📊', analyzing: '🔬', task_received: '📨',
+  error: '\u274C', max_iterations: '\u23F0',
 };
+
+const INDUSTRIES = ['tech', 'music', 'fitness', 'beauty', 'food', 'fashion', 'gaming', 'travel', 'education', 'business', 'lifestyle', 'health'];
 
 const STATUS_COLORS: Record<string, string> = {
-  completed: '#4ade80',
-  started: '#fbbf24',
-  awaiting_approval: '#fbbf24',
-  approved: '#4ade80',
-  declined: '#f87171',
+  completed: '#16a34a', started: '#f59e0b', awaiting_approval: '#f59e0b',
+  approved: '#16a34a', declined: '#dc2626', pending_analysis: '#2337f1',
+  pending: '#f59e0b', active: '#16a34a',
 };
 
-const PHASE_ICONS: Record<string, string> = {
-  data_gathering: '📥',
-  context_loading: '🧠',
-  ai_analysis: '🤖',
-  ai_writing: '🤖',
-  ai_generating: '🤖',
-  ai_calling: '⏳',
-  strategy: '🎨',
-  pattern_mining: '🔍',
-  result: '✅',
-  planning: '🧠',
-  plan_ready: '📋',
-  tool_call: '🔧',
-  tool_result: '📊',
-  analyzing: '🔬',
-  task_received: '📨',
-  error: '❌',
-  max_iterations: '⏰',
+// Fox-spark SVG component
+function FoxSpark({ size = 16, color = '#ee4d1f' }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill={color} style={{ display: 'inline-block', verticalAlign: 'middle' }}>
+      <path d="M12 1.5c.41 4.7 1.8 6.09 6.5 6.5-4.7.41-6.09 1.8-6.5 6.5-.41-4.7-1.8-6.09-6.5-6.5 4.7-.41 6.09-1.8 6.5-6.5z"/>
+    </svg>
+  );
+}
+
+const inputStyle: React.CSSProperties = {
+  width: '100%', padding: '10px 14px', background: 'var(--bg-sunken)',
+  border: '1px solid var(--border)', borderRadius: 'var(--r-sm)',
+  color: 'var(--fg)', fontSize: '0.85rem', fontFamily: 'var(--font-sans)',
+  outline: 'none', transition: 'border-color 0.2s',
+};
+const inputFocusStyle = 'input:focus, select:focus, textarea:focus { border-color: var(--kit-fox); }';
+
+const cardStyle: React.CSSProperties = {
+  background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--r-md)', padding: 'var(--sp-6)',
+};
+const darkCardStyle: React.CSSProperties = {
+  background: 'var(--dark-bg-elev)', border: '1px solid var(--dark-border)', borderRadius: 'var(--r-md)',
+  color: 'var(--dark-fg)', padding: 'var(--sp-6)',
 };
 
-const INDUSTRIES = [
-  'tech', 'music', 'fitness', 'beauty', 'food', 'fashion', 'gaming',
-  'travel', 'education', 'business', 'lifestyle', 'health',
-];
+// ═══════════════════════════════════════
+// MAIN DASHBOARD
+// ═══════════════════════════════════════
 
 export default function Dashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
@@ -90,15 +98,14 @@ export default function Dashboard() {
   const [keyMsg, setKeyMsg] = useState('');
   const [thinking, setThinking] = useState<any[]>([]);
   const [runningAgent, setRunningAgent] = useState<string | null>(null);
+  const [scrolled, setScrolled] = useState(false);
 
   const loadProviders = useCallback(async () => {
     try {
       const d = await fetchAPI('/llm/providers');
       setProviders(d.providers || []);
       setActiveProvider(d.active_provider || '');
-    } catch (e) {
-      console.error(e);
-    }
+    } catch (e) { console.error(e); }
   }, []);
 
   const load = useCallback(async () => {
@@ -106,29 +113,23 @@ export default function Dashboard() {
       const d = await fetchAPI('/dashboard');
       setData(d);
       if (d.recent_thinking) setThinking(d.recent_thinking);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
+    } catch (e) { console.error(e); } finally { setLoading(false); }
   }, []);
 
   useEffect(() => {
-    load();
-    loadProviders();
+    load(); loadProviders();
     const interval = setInterval(load, 3000);
     return () => clearInterval(interval);
   }, [load, loadProviders]);
 
-  const handleApprove = async (id: number) => {
-    await fetchAPI(`/approvals/${id}/resolve?decision=approved`, { method: 'POST' });
-    load();
-  };
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 20);
+    window.addEventListener('scroll', onScroll);
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
 
-  const handleDecline = async (id: number) => {
-    await fetchAPI(`/approvals/${id}/resolve?decision=declined`, { method: 'POST' });
-    load();
-  };
+  const handleApprove = async (id: number) => { await fetchAPI(`/approvals/${id}/resolve?decision=approved`, { method: 'POST' }); load(); };
+  const handleDecline = async (id: number) => { await fetchAPI(`/approvals/${id}/resolve?decision=declined`, { method: 'POST' }); load(); };
 
   const analyzeAllDeals = async () => {
     if (!data?.active_deals) return;
@@ -143,146 +144,127 @@ export default function Dashboard() {
   const learnMemory = async () => {
     setRunningAgent('Memory Agent learning patterns...');
     await fetchAPI('/agents/memory/learn', { method: 'POST' });
-    await load();
-    setRunningAgent(null);
+    await load(); setRunningAgent(null);
   };
 
   const addProviderKey = async () => {
     if (!keyValue.trim()) { setKeyMsg('Please enter an API key'); return; }
     try {
       setKeyMsg('Adding key...');
-      await fetchAPI('/llm/providers/key', {
-        method: 'POST',
-        body: JSON.stringify({ provider: keyProvider, api_key: keyValue.trim() }),
-      });
+      await fetchAPI('/llm/providers/key', { method: 'POST', body: JSON.stringify({ provider: keyProvider, api_key: keyValue.trim() }) });
       setKeyValue('');
-      setKeyMsg(`✅ ${PROVIDER_INFO[keyProvider]?.label || keyProvider} key added! System will use it automatically.`);
+      setKeyMsg(`Key added for ${PROVIDER_INFO[keyProvider]?.label || keyProvider}. System will use it automatically.`);
       loadProviders();
-    } catch (e: any) {
-      setKeyMsg(`❌ Error: ${e.message}`);
-    }
+    } catch (e: any) { setKeyMsg(`Error: ${e.message}`); }
   };
 
   const removeProviderKey = async (provider: string) => {
     try {
       await fetchAPI(`/llm/providers/${provider}`, { method: 'DELETE' });
-      setKeyMsg(`✅ Removed ${PROVIDER_INFO[provider]?.label || provider} key`);
+      setKeyMsg(`Removed ${PROVIDER_INFO[provider]?.label || provider} key`);
       loadProviders();
-    } catch (e: any) {
-      setKeyMsg(`❌ Error: ${e.message}`);
-    }
+    } catch (e: any) { setKeyMsg(`Error: ${e.message}`); }
   };
 
   const resetWorkspace = async () => {
-    if (!confirm('Reset everything? This will delete all data and take you back to onboarding.')) return;
+    if (!confirm('Reset everything? This will delete all data.')) return;
     await fetchAPI('/reset', { method: 'POST' });
     window.location.reload();
   };
 
-  // ─── ONBOARDING SCREEN ───
+  // ─── LOADING ───
   if (loading) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', background: 'var(--bg)' }}>
         <div style={{ textAlign: 'center' }}>
-          <div className="gradient-text" style={{ fontSize: '2rem', fontFamily: 'var(--font-display)', fontWeight: 700 }}>
-            CreatorForge OS
+          <FoxSpark size={40} color="#ee4d1f" />
+          <div style={{ fontFamily: 'var(--font-display)', fontSize: '2rem', marginTop: '16px' }}>
+            Creator<span className="kit-grad-text">Forge</span>
           </div>
-          <div style={{ color: 'var(--color-text-muted)', marginTop: '8px' }}>Loading...</div>
+          <div className="eyebrow" style={{ marginTop: '8px' }}>Loading workspace<span className="cursor-blink">_</span></div>
         </div>
       </div>
     );
   }
 
+  // ─── ONBOARDING ───
   if (data?.needs_onboarding) {
     return <OnboardingScreen onOnboarded={() => load()} />;
   }
 
   const { creator, stats, products, active_deals, pending_approvals, recent_activities, patterns } = data!;
 
+  const TABS = [
+    ['overview', 'Overview'], ['deals', 'Deals'], ['content', 'Content'],
+    ['storefront', 'Storefront'], ['memory', 'Memory'], ['agents', 'Agents'],
+    ['documents', 'Documents'], ['platforms', 'Platforms'], ['providers', 'AI'],
+  ] as const;
+
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--color-bg)' }}>
-      {/* Header */}
+    <div style={{ minHeight: '100vh', background: 'var(--bg)' }}>
+      <style>{inputFocusStyle}</style>
+
+      {/* ─── HEADER (Fixed, Kitsune nav) ─── */}
       <header style={{
-        borderBottom: '1px solid var(--color-border)',
-        padding: '16px 32px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        position: 'sticky',
-        top: 0,
-        zIndex: 100,
-        background: 'rgba(10,10,10,0.95)',
-        backdropFilter: 'blur(8px)',
+        position: 'sticky', top: 0, zIndex: 100,
+        background: scrolled ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,1)',
+        backdropFilter: scrolled ? 'blur(10px)' : 'none',
+        borderBottom: scrolled ? '1px solid var(--border)' : '1px solid transparent',
+        padding: scrolled ? '10px 32px' : '16px 32px',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        transition: 'all 200ms var(--ease-out)',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <span style={{ fontSize: '1.5rem' }}>🦊</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <FoxSpark size={22} color="#ee4d1f" />
           <div>
-            <div style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '1.1rem', letterSpacing: '-0.02em' }}>
-              CreatorForge <span className="gradient-text">OS</span>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: '1.15rem', letterSpacing: '-0.02em' }}>
+              Creator<span className="kit-grad-text">Forge</span>
             </div>
-            <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>The Agentic Operating System for Creators</div>
+            <div className="eyebrow" style={{ fontSize: '9px' }}>The Agentic OS for Creators</div>
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
           {runningAgent && (
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: '8px',
-              padding: '6px 12px', background: 'rgba(251,191,36,0.1)',
-              borderRadius: 20, border: '1px solid rgba(251,191,36,0.3)',
-            }}>
-              <span className="pulse-dot" style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--color-warning)', color: 'var(--color-warning)' }} />
-              <span style={{ fontSize: '0.75rem', color: 'var(--color-warning)' }}>{runningAgent}</span>
+            <div className="status-chip execute">
+              <span className="dot" />
+              {runningAgent}
             </div>
           )}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span className="pulse-dot" style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--color-success)', color: 'var(--color-success)' }} />
-            <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>4 agents active</span>
+          <div className="status-chip live" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span className="dot" />
+            <span style={{ fontSize: '11px' }}>12 agents live</span>
           </div>
-          {stats.llm_enabled && (
-            <Badge style={{ background: 'rgba(74,222,128,0.1)', color: 'var(--color-success)', border: '1px solid rgba(74,222,128,0.3)' }}>
-              🤖 {activeProvider || 'AI'} Active
-            </Badge>
+          {stats?.llm_enabled && (
+            <span className="status-chip approved">
+              <span className="dot" />
+              {activeProvider || 'AI'} active
+            </span>
           )}
-          <button
-            onClick={resetWorkspace}
-            style={{
-              padding: '6px 12px', borderRadius: 8, background: 'transparent',
-              border: '1px solid var(--color-border)', color: 'var(--color-text-muted)',
-              cursor: 'pointer', fontSize: '0.72rem', fontWeight: 500,
-            }}
-          >
-            ↻ Reset
+          <button onClick={resetWorkspace} className="btn-outline" style={{ fontSize: '11px', padding: '6px 14px' }}>
+            Reset
           </button>
         </div>
       </header>
 
-      {/* Tabs */}
-      <nav style={{ display: 'flex', gap: '2px', padding: '0 32px', borderBottom: '1px solid var(--color-border)' }}>
-        {([
-          ['overview', 'Overview'],
-          ['deals', 'Deals'],
-          ['content', 'Content'],
-          ['storefront', 'Storefront'],
-          ['memory', 'Memory'],
-          ['agents', 'Agents'],
-          ['documents', 'Documents'],
-          ['platforms', 'Platforms'],
-          ['providers', 'AI Providers'],
-        ] as const).map(([key, label]) => (
+      {/* ─── TABS ─── */}
+      <nav style={{
+        display: 'flex', gap: '0', padding: '0 32px',
+        borderBottom: '1px solid var(--border)', overflowX: 'auto',
+        background: 'var(--bg)',
+      }}>
+        {TABS.map(([key, label]) => (
           <button
             key={key}
             onClick={() => setTab(key)}
             style={{
-              padding: '12px 16px',
-              background: 'none',
-              border: 'none',
-              borderBottom: tab === key ? '2px solid var(--color-accent)' : '2px solid transparent',
-              color: tab === key ? 'var(--color-text)' : 'var(--color-text-muted)',
-              cursor: 'pointer',
-              fontFamily: 'var(--font-body)',
-              fontSize: '0.85rem',
-              fontWeight: 500,
-              transition: 'color 0.2s',
+              padding: '12px 18px', background: 'none', border: 'none',
+              borderBottom: tab === key ? '2px solid var(--kit-fox)' : '2px solid transparent',
+              color: tab === key ? 'var(--fg)' : 'var(--fg-3)',
+              cursor: 'pointer', fontFamily: 'var(--font-sans)',
+              fontSize: '0.85rem', fontWeight: tab === key ? 600 : 400,
+              transition: 'color 0.2s, border-color 0.2s',
+              whiteSpace: 'nowrap',
             }}
           >
             {label}
@@ -290,51 +272,22 @@ export default function Dashboard() {
         ))}
       </nav>
 
-      <main style={{ maxWidth: 1200, margin: '0 auto', padding: '32px' }}>
+      {/* ─── MAIN ─── */}
+      <main style={{ maxWidth: 1248, margin: '0 auto', padding: 'clamp(32px, 5vw, 64px) 32px' }}>
         {tab === 'overview' && (
-          <OverviewTab
-            creator={creator}
-            stats={stats}
-            pending_approvals={pending_approvals}
-            recent_activities={recent_activities}
-            thinking={thinking}
-            onApprove={handleApprove}
-            onDecline={handleDecline}
-          />
+          <OverviewTab creator={creator} stats={stats} pending_approvals={pending_approvals} recent_activities={recent_activities} thinking={thinking} onApprove={handleApprove} onDecline={handleDecline} />
         )}
         {tab === 'deals' && (
-          <DealsTab
-            deals={active_deals}
-            onAnalyzeAll={analyzeAllDeals}
-            onAnalyze={async (id: number) => {
-              setRunningAgent('Deal Agent analyzing...');
-              await fetchAPI(`/agents/deal/analyze/${id}`, { method: 'POST' });
-              await load();
-              setRunningAgent(null);
-            }}
-            onReload={load}
-          />
+          <DealsTab deals={active_deals} onAnalyzeAll={analyzeAllDeals} onAnalyze={async (id: number) => { setRunningAgent('Deal Agent analyzing...'); await fetchAPI(`/agents/deal/analyze/${id}`, { method: 'POST' }); await load(); setRunningAgent(null); }} onReload={load} />
         )}
         {tab === 'content' && <ContentTab onReload={load} />}
         {tab === 'storefront' && <StorefrontTab products={products} stats={stats} onReload={load} />}
         {tab === 'memory' && <MemoryTab patterns={patterns} onLearn={learnMemory} />}
         {tab === 'agents' && <AgentsTab activities={recent_activities} thinking={thinking} />}
-        {tab === 'documents' && (
-          <DocumentsTab documents={data?.documents || []} onReload={load} />
-        )}
+        {tab === 'documents' && <DocumentsTab documents={data?.documents || []} onReload={load} />}
         {tab === 'platforms' && <PlatformsTab />}
         {tab === 'providers' && (
-          <ProvidersTab
-            providers={providers}
-            activeProvider={activeProvider}
-            keyProvider={keyProvider}
-            setKeyProvider={setKeyProvider}
-            keyValue={keyValue}
-            setKeyValue={setKeyValue}
-            onAddKey={addProviderKey}
-            onRemoveKey={removeProviderKey}
-            keyMsg={keyMsg}
-          />
+          <ProvidersTab providers={providers} activeProvider={activeProvider} keyProvider={keyProvider} setKeyProvider={setKeyProvider} keyValue={keyValue} setKeyValue={setKeyValue} onAddKey={addProviderKey} onRemoveKey={removeProviderKey} keyMsg={keyMsg} />
         )}
       </main>
     </div>
@@ -342,7 +295,7 @@ export default function Dashboard() {
 }
 
 // ═══════════════════════════════════════
-// ONBOARDING SCREEN
+// ONBOARDING SCREEN (Kitsune intake terminal)
 // ═══════════════════════════════════════
 
 function OnboardingScreen({ onOnboarded }: { onOnboarded: () => void }) {
@@ -356,147 +309,90 @@ function OnboardingScreen({ onOnboarded }: { onOnboarded: () => void }) {
   const [error, setError] = useState('');
 
   const handleSubmit = async () => {
-    if (!name.trim() || !handle.trim()) {
-      setError('Please enter your company name and handle');
-      return;
-    }
-    setSubmitting(true);
-    setError('');
+    if (!name.trim() || !handle.trim()) { setError('Please enter your creator name and handle'); return; }
+    setSubmitting(true); setError('');
     try {
-      await fetchAPI('/onboard', {
-        method: 'POST',
-        body: JSON.stringify({
-          company_name: name.trim(),
-          handle: handle.trim().replace('@', ''),
-          industry,
-          bio: bio.trim() || `${name.trim()} — ${industry} content creator`,
-          followers: parseInt(followers) || 0,
-          monthly_revenue: parseFloat(revenue) || 0,
-        }),
-      });
+      await fetchAPI('/onboard', { method: 'POST', body: JSON.stringify({
+        company_name: name.trim(), handle: handle.trim().replace('@', ''),
+        industry, bio: bio.trim() || `${name.trim()} — ${industry} content creator`,
+        followers: parseInt(followers) || 0, monthly_revenue: parseFloat(revenue) || 0,
+      })});
       onOnboarded();
-    } catch (e: any) {
-      setError(`Error: ${e.message}`);
-    } finally {
-      setSubmitting(false);
-    }
+    } catch (e: any) { setError(`Error: ${e.message}`); } finally { setSubmitting(false); }
   };
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--color-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+    <div style={{ minHeight: '100vh', background: 'var(--kit-page-gradient)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
       <div style={{ maxWidth: 560, width: '100%' }}>
         {/* Logo */}
         <div style={{ textAlign: 'center', marginBottom: '32px' }}>
-          <div style={{ fontSize: '3rem' }}>🦊</div>
-          <div className="gradient-text" style={{ fontSize: '2rem', fontFamily: 'var(--font-display)', fontWeight: 700, marginTop: '8px' }}>
-            CreatorForge OS
+          <FoxSpark size={48} color="#ee4d1f" />
+          <div style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(2rem, 4vw, 2.5rem)', marginTop: '12px' }}>
+            Creator<span className="kit-grad-text">Forge OS</span>
           </div>
-          <div style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem', marginTop: '4px' }}>
-            The Agentic Operating System for Creators
-          </div>
+          <div className="eyebrow" style={{ marginTop: '8px' }}>The Agentic Operating System for Creators</div>
         </div>
 
         {/* What is this */}
-        <div style={{
-          background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-          borderRadius: 12, padding: '20px', marginBottom: '24px',
-        }}>
+        <div style={cardStyle}>
           <h3 style={{ fontSize: '0.95rem', fontWeight: 600, marginBottom: '12px' }}>What is CreatorForge OS?</h3>
-          <p style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)', lineHeight: 1.7, marginBottom: '12px' }}>
-            An AI-powered operating system that runs your creator business autonomously. Four AI agents work together:
+          <p style={{ fontSize: '0.82rem', color: 'var(--fg-3)', lineHeight: 1.7, marginBottom: '16px' }}>
+            An AI-powered operating system that runs your creator business autonomously. <strong style={{ color: 'var(--fg)' }}>12 AI agents</strong> work together — researching brands, writing content, sending emails, creating invoices, and posting to your platforms.
           </p>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '0.78rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><span>🤝</span><span style={{ color: 'var(--color-text-muted)' }}><strong style={{ color: 'var(--color-text)' }}>Deal Agent</strong> — analyzes brand offers, negotiates terms</span></div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><span>✍️</span><span style={{ color: 'var(--color-text-muted)' }}><strong style={{ color: 'var(--color-text)' }}>Content Agent</strong> — drafts posts, videos, reels</span></div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><span>💰</span><span style={{ color: 'var(--color-text-muted)' }}><strong style={{ color: 'var(--color-text)' }}>Finance Agent</strong> — generates invoices, tracks payments</span></div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><span>🧠</span><span style={{ color: 'var(--color-text-muted)' }}><strong style={{ color: 'var(--color-text)' }}>Memory Agent</strong> — learns patterns, improves decisions</span></div>
-          </div>
-          <div style={{
-            marginTop: '14px', paddingTop: '14px', borderTop: '1px solid var(--color-border)',
-            fontSize: '0.78rem', color: 'var(--color-text-muted)',
-          }}>
-            <strong style={{ color: 'var(--color-text)' }}>How to use:</strong> Add your brand deals and content briefs. The agents will analyze, negotiate, draft, and invoice — all with AI. You approve everything before it goes out.
+            {[
+              ['🤖', '6 Expert Agents', 'Deal, Content, Finance, Memory, Strategy, Outreach'],
+              ['⚙️', '6 Worker Agents', 'Publisher, Email, Contract, Analytics, Scheduler, Notify'],
+              ['🌐', '28 Real Tools', 'Web search, market research, document generation'],
+              ['📸', '8 Platforms', 'Instagram, YouTube, Stripe, Email, Twitter, Slack, GitHub, Telegram'],
+            ].map(([icon, title, desc]) => (
+              <div key={title} style={{ display: 'flex', gap: '8px', alignItems: 'start' }}>
+                <span style={{ fontSize: '1.1rem' }}>{icon}</span>
+                <div>
+                  <strong style={{ color: 'var(--fg)', fontSize: '0.78rem' }}>{title}</strong>
+                  <div style={{ color: 'var(--fg-3)', fontSize: '0.7rem', marginTop: '2px' }}>{desc}</div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 
-        {/* Onboarding Form */}
-        <div style={{
-          background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-          borderRadius: 12, padding: '24px',
-        }}>
-          <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '16px' }}>Set up your workspace</h3>
+        {/* Intake form */}
+        <div style={{ ...cardStyle, marginTop: '16px' }}>
+          <div className="eyebrow" style={{ marginBottom: '16px' }}>Work with us</div>
+          <h3 style={{ fontFamily: 'var(--font-display)', fontSize: '1.4rem', marginBottom: '20px' }}>Bring us bottlenecks<span className="cursor-blink">_</span></h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             <div>
-              <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--color-text-muted)', marginBottom: '4px' }}>Company / Creator Name *</label>
-              <input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. TechFlow Studios"
-                style={inputStyle}
-              />
+              <label className="eyebrow" style={{ display: 'block', marginBottom: '6px' }}>Creator Name *</label>
+              <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Layla Makes" style={inputStyle} />
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--color-text-muted)', marginBottom: '4px' }}>Handle *</label>
-              <input
-                value={handle}
-                onChange={(e) => setHandle(e.target.value)}
-                placeholder="e.g. techflow"
-                style={inputStyle}
-              />
+              <label className="eyebrow" style={{ display: 'block', marginBottom: '6px' }}>Handle *</label>
+              <input value={handle} onChange={(e) => setHandle(e.target.value)} placeholder="e.g. layla.makes" style={inputStyle} />
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--color-text-muted)', marginBottom: '4px' }}>Industry / Niche</label>
+              <label className="eyebrow" style={{ display: 'block', marginBottom: '6px' }}>Industry</label>
               <select value={industry} onChange={(e) => setIndustry(e.target.value)} style={inputStyle}>
                 {INDUSTRIES.map(i => <option key={i} value={i}>{i.charAt(0).toUpperCase() + i.slice(1)}</option>)}
               </select>
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--color-text-muted)', marginBottom: '4px' }}>Bio / Description</label>
-              <textarea
-                value={bio}
-                onChange={(e) => setBio(e.target.value)}
-                placeholder="What do you create? What's your audience about?"
-                rows={2}
-                style={{ ...inputStyle, resize: 'vertical' }}
-              />
+              <label className="eyebrow" style={{ display: 'block', marginBottom: '6px' }}>Bio</label>
+              <textarea value={bio} onChange={(e) => setBio(e.target.value)} placeholder="What do you create?" rows={2} style={{ ...inputStyle, resize: 'vertical' }} />
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <div>
-                <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--color-text-muted)', marginBottom: '4px' }}>Followers</label>
-                <input
-                  type="number"
-                  value={followers}
-                  onChange={(e) => setFollowers(e.target.value)}
-                  placeholder="45000"
-                  style={inputStyle}
-                />
+                <label className="eyebrow" style={{ display: 'block', marginBottom: '6px' }}>Followers</label>
+                <input type="number" value={followers} onChange={(e) => setFollowers(e.target.value)} placeholder="184000" style={inputStyle} />
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--color-text-muted)', marginBottom: '4px' }}>Monthly Revenue ($)</label>
-                <input
-                  type="number"
-                  value={revenue}
-                  onChange={(e) => setRevenue(e.target.value)}
-                  placeholder="8000"
-                  style={inputStyle}
-                />
+                <label className="eyebrow" style={{ display: 'block', marginBottom: '6px' }}>Monthly Revenue ($)</label>
+                <input type="number" value={revenue} onChange={(e) => setRevenue(e.target.value)} placeholder="12400" style={inputStyle} />
               </div>
             </div>
-            {error && (
-              <div style={{ fontSize: '0.82rem', color: 'var(--color-danger)' }}>{error}</div>
-            )}
-            <button
-              onClick={handleSubmit}
-              disabled={submitting}
-              style={{
-                padding: '14px', borderRadius: 10,
-                background: submitting ? 'var(--color-surface-2)' : 'var(--color-accent)',
-                color: submitting ? 'var(--color-text-muted)' : '#000',
-                border: 'none', cursor: submitting ? 'wait' : 'pointer',
-                fontWeight: 700, fontSize: '0.9rem', marginTop: '4px',
-              }}
-            >
-              {submitting ? 'Setting up your workspace...' : '🚀 Start →'}
+            {error && <div style={{ fontSize: '0.82rem', color: 'var(--color-danger)' }}>{error}</div>}
+            <button onClick={handleSubmit} disabled={submitting} className="btn-terminal" style={{ width: '100%', justifyContent: 'center', padding: '14px', marginTop: '4px' }}>
+              {submitting ? 'Setting up workspace...' : 'Start \u2192'}
             </button>
           </div>
         </div>
@@ -505,141 +401,53 @@ function OnboardingScreen({ onOnboarded }: { onOnboarded: () => void }) {
   );
 }
 
-const inputStyle: React.CSSProperties = {
-  width: '100%',
-  padding: '10px 12px',
-  background: 'var(--color-bg)',
-  border: '1px solid var(--color-border)',
-  borderRadius: 8,
-  color: 'var(--color-text)',
-  fontSize: '0.85rem',
-  fontFamily: 'var(--font-body)',
-  outline: 'none',
-};
-
 // ═══════════════════════════════════════
 // OVERVIEW TAB
 // ═══════════════════════════════════════
 
 function OverviewTab({ creator, stats, pending_approvals, recent_activities, thinking, onApprove, onDecline }: any) {
-  const [showThinking, setShowThinking] = useState(true);
+  if (!creator) return null;
 
   return (
-    <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      {/* Creator Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-        <div style={{
-          width: 56, height: 56, borderRadius: 12,
-          background: 'var(--color-surface)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: '1.8rem', border: '1px solid var(--color-border)',
-        }}>
-          {creator.avatar || '🎵'}
+    <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 'clamp(24px, 4vw, 48px)' }}>
+      {/* Hero header */}
+      <div>
+        <div className="eyebrow" style={{ marginBottom: '12px' }}>
+          {creator.industry} / {creator.handle}
         </div>
-        <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, margin: 0 }}>{creator.name}</h1>
-          <div style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
-            @{creator.handle} · {creator.bio}
-          </div>
-        </div>
+        <h1 style={{ fontSize: 'clamp(36px, 5vw, 64px)', fontFamily: 'var(--font-display)', lineHeight: 0.98 }}>
+          {creator.company_name}
+        </h1>
+        <p style={{ fontSize: 'var(--fs-body-lg)', color: 'var(--fg-3)', maxWidth: '52ch', marginTop: '12px', lineHeight: 1.5 }}>
+          {creator.bio || 'No bio set.'}
+        </p>
       </div>
 
-      {/* Stats Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '16px' }}>
-        <StatCard label="Followers" value={stats.followers.toLocaleString()} icon="👥" />
-        <StatCard label="This Month" value={`$${stats.monthly_revenue.toLocaleString()}`} icon="📈" accent />
-        <StatCard label="Cleared" value={`$${stats.cleared_revenue.toLocaleString()}`} icon="✅" />
-        <StatCard label="Active Deals" value={stats.active_deals} icon="🤝" />
-        <StatCard label="Content" value={`${stats.published_content}/${stats.content_count}`} icon="✍️" />
-        <StatCard label="Patterns" value={stats.patterns_count} icon="🧠" />
-        <StatCard label="Pending" value={stats.pending_approvals} icon="⏳" highlight={stats.pending_approvals > 0} />
-        <StatCard label="Total Deals" value={`$${stats.total_deal_revenue.toLocaleString()}`} icon="💰" />
+      {/* Stats grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '12px' }}>
+        <StatCard label="Followers" value={stats?.followers?.toLocaleString() || '0'} icon="👥" accent="fox" />
+        <StatCard label="Monthly Revenue" value={`$${(stats?.monthly_revenue || 0).toLocaleString()}`} icon="💰" accent="electric" />
+        <StatCard label="Active Deals" value={stats?.active_deals || 0} icon="🤝" accent="indigo" />
+        <StatCard label="Pending Approvals" value={pending_approvals?.length || 0} icon="⏳" accent="fox" highlight={pending_approvals?.length > 0} />
+        <StatCard label="Total Revenue" value={`$${(stats?.total_revenue || 0).toLocaleString()}`} icon="💸" accent="electric" />
+        <StatCard label="AI Agents" value="12" icon="🤖" accent="indigo" />
       </div>
 
-      {/* Live Agent Thinking */}
-      {thinking && thinking.length > 0 && (
+      {/* Pending approvals */}
+      {pending_approvals && pending_approvals.length > 0 && (
         <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-            <h2 style={{ fontSize: '1.1rem' }}>🧠 Agent Thinking Process</h2>
-            <button
-              onClick={() => setShowThinking(!showThinking)}
-              style={{
-                padding: '4px 10px', borderRadius: 6, background: 'var(--color-surface)',
-                border: '1px solid var(--color-border)', color: 'var(--color-text-muted)',
-                cursor: 'pointer', fontSize: '0.72rem',
-              }}
-            >
-              {showThinking ? 'Hide' : 'Show'}
-            </button>
-          </div>
-          {showThinking && (
-            <div style={{
-              background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-              borderRadius: 12, padding: '16px', maxHeight: '300px', overflow: 'auto',
-            }}>
-              {thinking.slice(0, 20).map((t: any, i: number) => (
-                <div key={t.id || i} className="slide-in" style={{
-                  display: 'flex', alignItems: 'start', gap: '10px',
-                  padding: '8px 0', borderBottom: i < thinking.length - 1 ? '1px solid var(--color-border)' : 'none',
-                }}>
-                  <span style={{ fontSize: '1rem', flexShrink: 0 }}>
-                    {PHASE_ICONS[t.phase] || '💭'}
-                  </span>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginBottom: '2px' }}>
-                      {AGENT_ICONS[t.agent_name] || '🤖'} {t.agent_name.replace(/_/g, ' ')} · step {t.step_number}
-                    </div>
-                    <div style={{ fontSize: '0.82rem', color: 'var(--color-text)' }}>{t.thought}</div>
-                  </div>
-                  <span className="mono" style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)', flexShrink: 0 }}>
-                    {new Date(t.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Pending Approvals */}
-      {pending_approvals.length > 0 && (
-        <div>
-          <h2 style={{ fontSize: '1.1rem', marginBottom: '12px' }}>⚠️ Approval Queue</h2>
+          <div className="eyebrow" style={{ marginBottom: '12px' }}>Awaiting your judgment</div>
+          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(24px, 3vw, 36px)', marginBottom: '16px' }}>Approvals</h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {pending_approvals.map((a: any) => (
-              <div key={a.id} className="slide-in" style={{
-                background: 'var(--color-surface)',
-                border: '1px solid var(--color-border)',
-                borderRadius: 12,
-                padding: '16px',
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 600, marginBottom: '4px' }}>
-                      {AGENT_ICONS[a.agent_name] || '⚙️'} {a.title}
-                    </div>
-                    <div style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem', whiteSpace: 'pre-wrap' }}>
-                      {a.summary}
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', gap: '8px', marginLeft: '16px' }}>
-                    <button
-                      onClick={() => onApprove(a.id)}
-                      style={{
-                        padding: '6px 16px', borderRadius: 8, border: 'none',
-                        background: 'var(--color-success)', color: '#000',
-                        cursor: 'pointer', fontWeight: 600, fontSize: '0.8rem',
-                      }}
-                    >Approve</button>
-                    <button
-                      onClick={() => onDecline(a.id)}
-                      style={{
-                        padding: '6px 16px', borderRadius: 8,
-                        background: 'transparent', color: 'var(--color-danger)',
-                        border: '1px solid var(--color-danger)', cursor: 'pointer', fontWeight: 600, fontSize: '0.8rem',
-                      }}
-                    >Decline</button>
-                  </div>
+              <div key={a.id} style={{ ...cardStyle, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px' }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{a.summary}</div>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--fg-3)', marginTop: '4px' }}>{a.details}</div>
+                </div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button onClick={() => onApprove(a.id)} className="btn-terminal" style={{ padding: '8px 16px', fontSize: '11px' }}>Approve</button>
+                  <button onClick={() => onDecline(a.id)} className="btn-outline" style={{ padding: '8px 16px', fontSize: '11px' }}>Decline</button>
                 </div>
               </div>
             ))}
@@ -647,39 +455,51 @@ function OverviewTab({ creator, stats, pending_approvals, recent_activities, thi
         </div>
       )}
 
-      {/* Agent Activity Feed */}
-      <div>
-        <h2 style={{ fontSize: '1.1rem', marginBottom: '12px' }}>🔄 Agent Activity Feed</h2>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          {recent_activities.length === 0 ? (
-            <div style={{
-              padding: '24px', textAlign: 'center', color: 'var(--color-text-muted)',
-              background: 'var(--color-surface)', borderRadius: 12, fontSize: '0.85rem',
-            }}>
-              No agent activity yet. Go to <strong>Deals</strong> or <strong>Content</strong> tab to add something for the agents to work on.
-            </div>
-          ) : (
-            recent_activities.map((a: any, i: number) => (
-              <div key={a.id || i} className="slide-in" style={{
-                display: 'flex', alignItems: 'center', gap: '10px',
-                padding: '10px 12px',
-                background: 'var(--color-surface)',
-                borderRadius: 8,
-                fontSize: '0.82rem',
-              }}>
-                <span style={{ fontSize: '1.1rem' }}>{AGENT_ICONS[a.agent_name] || '⚙️'}</span>
-                <span style={{
-                  width: 8, height: 8, borderRadius: '50%',
-                  background: STATUS_COLORS[a.status] || '#666',
-                  flexShrink: 0,
-                }} />
-                <span style={{ flex: 1 }}>{a.summary}</span>
-                <span className="mono" style={{ color: 'var(--color-text-muted)', fontSize: '0.7rem' }}>
-                  {new Date(a.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </span>
+      {/* Activity + Thinking */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', '@media (max-width: 760px)': { gridTemplateColumns: '1fr' } } as any}>
+        {/* Recent Activity */}
+        <div>
+          <div className="eyebrow" style={{ marginBottom: '12px' }}>Live activity</div>
+          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(20px, 2.5vw, 28px)', marginBottom: '16px' }}>Agent Feed</h2>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            {(recent_activities || []).slice(0, 12).map((a: any, i: number) => (
+              <div key={i} className="slide-in" style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', background: 'var(--bg-sunken)', borderRadius: 'var(--r-sm)', fontSize: '0.8rem' }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: STATUS_COLORS[a.status] || '#9aa1b1', flexShrink: 0 }} />
+                <span className="mono" style={{ fontSize: '0.68rem', color: 'var(--fg-3)', textTransform: 'uppercase' }}>{a.agent_name}</span>
+                <span style={{ flex: 1, color: 'var(--fg-2)' }}>{a.summary}</span>
+                <span className="mono" style={{ color: 'var(--fg-mute)', fontSize: '0.65rem' }}>{new Date(a.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
               </div>
-            ))
-          )}
+            ))}
+            {(!recent_activities || recent_activities.length === 0) && (
+              <div style={{ padding: '24px', textAlign: 'center', color: 'var(--fg-mute)', background: 'var(--bg-sunken)', borderRadius: 'var(--r-md)', fontSize: '0.85rem' }}>
+                No activity yet. Add deals or content to see agents in action.
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Agent Thinking */}
+        <div>
+          <div className="eyebrow" style={{ marginBottom: '12px' }}>ReAct loop</div>
+          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(20px, 2.5vw, 28px)', marginBottom: '16px' }}>Agent Thinking</h2>
+          <div style={{ background: 'var(--dark-bg)', borderRadius: 'var(--r-md)', padding: '16px', maxHeight: '400px', overflow: 'auto', border: '1px solid var(--dark-border)' }}>
+            {(thinking || []).slice(0, 20).map((t: any, i: number) => (
+              <div key={i} className="slide-in" style={{ display: 'flex', gap: '10px', padding: '8px 0', borderBottom: i < thinking.length - 1 ? '1px solid var(--dark-border)' : 'none', fontSize: '0.78rem' }}>
+                <span style={{ flexShrink: 0, fontSize: '0.9rem' }}>{PHASE_ICONS[t.phase] || '🔹'}</span>
+                <div style={{ flex: 1 }}>
+                  <div className="mono" style={{ fontSize: '0.62rem', color: 'var(--dark-fg-3)', marginBottom: '2px', textTransform: 'uppercase' }}>
+                    {t.agent_name} \u00b7 {t.phase.replace(/_/g, ' ')}
+                  </div>
+                  <div style={{ color: 'var(--dark-fg-2)' }}>{t.thought}</div>
+                </div>
+              </div>
+            ))}
+            {(!thinking || thinking.length === 0) && (
+              <div style={{ padding: '24px', textAlign: 'center', color: 'var(--dark-fg-3)', fontSize: '0.85rem' }}>
+                Agent thoughts will appear here when agents run.
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -687,21 +507,19 @@ function OverviewTab({ creator, stats, pending_approvals, recent_activities, thi
 }
 
 function StatCard({ label, value, icon, accent, highlight }: any) {
+  const accentColors: Record<string, string> = { fox: '#ee4d1f', electric: '#2337f1', indigo: '#4b35c8' };
+  const color = accentColors[accent] || '#6b7180';
   return (
     <div style={{
-      background: 'var(--color-surface)',
-      border: highlight ? '1px solid var(--color-warning)' : '1px solid var(--color-border)',
-      borderRadius: 12,
-      padding: '16px',
+      ...cardStyle, padding: '20px',
+      borderColor: highlight ? color : 'var(--border)',
+      boxShadow: highlight ? `0 4px 20px -8px ${color}40` : 'none',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-        <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</span>
-        <span style={{ fontSize: '1rem', opacity: 0.6 }}>{icon}</span>
+        <span className="eyebrow">{label}</span>
+        <span style={{ fontSize: '1rem' }}>{icon}</span>
       </div>
-      <div style={{
-        fontSize: '1.3rem', fontWeight: 700, fontFamily: 'var(--font-display)',
-        color: accent ? 'var(--color-accent)' : 'var(--color-text)',
-      }}>
+      <div style={{ fontFamily: 'var(--font-display)', fontSize: '2rem', lineHeight: 1, color: highlight ? color : 'var(--fg)' }}>
         {value}
       </div>
     </div>
@@ -713,231 +531,108 @@ function StatCard({ label, value, icon, accent, highlight }: any) {
 // ═══════════════════════════════════════
 
 function DealsTab({ deals, onAnalyzeAll, onAnalyze, onReload }: any) {
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [newDeal, setNewDeal] = useState({
-    brand_name: '', brand_type: '', deal_type: 'sponsorship', offer_amount: '', description: '',
-  });
-  const [adding, setAdding] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ brand_name: '', brand_type: 'tech', deal_type: 'sponsorship', offer_amount: '', description: '' });
 
-  const addDeal = async () => {
-    if (!newDeal.brand_name.trim()) return;
-    setAdding(true);
-    try {
-      await fetchAPI('/deals', {
-        method: 'POST',
-        body: JSON.stringify({
-          ...newDeal,
-          offer_amount: parseFloat(newDeal.offer_amount) || 0,
-        }),
-      });
-      setNewDeal({ brand_name: '', brand_type: '', deal_type: 'sponsorship', offer_amount: '', description: '' });
-      setShowAddForm(false);
-      onReload();
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setAdding(false);
-    }
+  const handleAdd = async () => {
+    if (!form.brand_name.trim()) return;
+    await fetchAPI('/deals', { method: 'POST', body: JSON.stringify({
+      brand_name: form.brand_name.trim(), brand_type: form.brand_type,
+      deal_type: form.deal_type, offer_amount: parseFloat(form.offer_amount) || 0,
+      description: form.description.trim(),
+    })});
+    setForm({ brand_name: '', brand_type: 'tech', deal_type: 'sponsorship', offer_amount: '', description: '' });
+    setShowForm(false); onReload();
   };
 
-  const deleteDeal = async (id: number) => {
-    await fetchAPI(`/deals/${id}`, { method: 'DELETE' });
-    onReload();
+  const dealStatusColor: Record<string, string> = {
+    pending_analysis: '#2337f1', analyzed: '#f59e0b', approved: '#16a34a',
+    declined: '#dc2626', countered: '#ee4d1f', completed: '#16a34a',
   };
-
-  const pending = deals?.filter((d: any) => d.status === 'pending_analysis') || [];
-  const analyzed = deals?.filter((d: any) => d.status !== 'pending_analysis') || [];
 
   return (
     <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h2 style={{ fontSize: '1.3rem' }}>Brand Deals</h2>
+        <div>
+          <div className="eyebrow" style={{ marginBottom: '8px' }}>Deal pipeline</div>
+          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(32px, 4vw, 48px)' }}>Deals</h1>
+        </div>
         <div style={{ display: 'flex', gap: '8px' }}>
-          {pending.length > 0 && (
-            <button onClick={onAnalyzeAll} style={{
-              padding: '8px 20px', borderRadius: 8,
-              background: 'var(--color-accent)', color: '#000',
-              border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem',
-            }}>
-              🤝 Analyze {pending.length} Pending
+          {deals && deals.some((d: any) => d.status === 'pending_analysis') && (
+            <button onClick={onAnalyzeAll} className="btn-terminal" style={{ fontSize: '11px', padding: '10px 18px' }}>
+              Analyze All \u2192
             </button>
           )}
-          <button onClick={() => setShowAddForm(!showAddForm)} style={{
-            padding: '8px 20px', borderRadius: 8,
-            background: showAddForm ? 'var(--color-surface-2)' : 'var(--color-surface)',
-            color: showAddForm ? 'var(--color-text-muted)' : 'var(--color-accent)',
-            border: showAddForm ? '1px solid var(--color-border)' : '1px solid var(--color-accent)',
-            cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem',
-          }}>
-            {showAddForm ? '✕ Cancel' : '+ Add Deal'}
+          <button onClick={() => setShowForm(!showForm)} className="btn-outline" style={{ fontSize: '11px', padding: '10px 18px' }}>
+            {showForm ? 'Cancel' : '+ Add Deal'}
           </button>
         </div>
       </div>
 
-      {/* Add Deal Form */}
-      {showAddForm && (
-        <div className="slide-in" style={{
-          background: 'var(--color-surface)', border: '1px solid var(--color-accent)',
-          borderRadius: 12, padding: '20px',
-        }}>
-          <h3 style={{ fontSize: '0.95rem', fontWeight: 600, marginBottom: '14px' }}>Add a Brand Deal</h3>
-          <p style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', marginBottom: '14px' }}>
-            Enter the details of an inbound brand offer. The Deal Agent will analyze it for brand fit, benchmark the price, and negotiate a counter-offer.
-          </p>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
-            <div>
-              <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '4px' }}>Brand Name *</label>
-              <input value={newDeal.brand_name} onChange={(e) => setNewDeal({...newDeal, brand_name: e.target.value})} placeholder="e.g. Notion" style={inputStyle} />
-            </div>
-            <div>
-              <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '4px' }}>Brand Type</label>
-              <input value={newDeal.brand_type} onChange={(e) => setNewDeal({...newDeal, brand_type: e.target.value})} placeholder="e.g. software, hardware, food" style={inputStyle} />
-            </div>
-            <div>
-              <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '4px' }}>Deal Type</label>
-              <select value={newDeal.deal_type} onChange={(e) => setNewDeal({...newDeal, deal_type: e.target.value})} style={inputStyle}>
-                <option value="sponsorship">Sponsorship</option>
-                <option value="collab">Collaboration</option>
-                <option value="affiliate">Affiliate</option>
-                <option value="ambassador">Ambassador</option>
+      {/* Add form */}
+      {showForm && (
+        <div style={cardStyle}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+              <input value={form.brand_name} onChange={(e) => setForm({ ...form, brand_name: e.target.value })} placeholder="Brand name" style={inputStyle} />
+              <select value={form.brand_type} onChange={(e) => setForm({ ...form, brand_type: e.target.value })} style={inputStyle}>
+                {['tech', 'fashion', 'food', 'beauty', 'fitness', 'gaming', 'music', 'lifestyle', 'other'].map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+              <select value={form.deal_type} onChange={(e) => setForm({ ...form, deal_type: e.target.value })} style={inputStyle}>
+                {['sponsorship', 'affiliate', 'product', 'ambassador', 'licensing'].map(t => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
-            <div>
-              <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '4px' }}>Offer Amount ($)</label>
-              <input type="number" value={newDeal.offer_amount} onChange={(e) => setNewDeal({...newDeal, offer_amount: e.target.value})} placeholder="5000" style={inputStyle} />
+            <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: '12px' }}>
+              <input type="number" value={form.offer_amount} onChange={(e) => setForm({ ...form, offer_amount: e.target.value })} placeholder="Amount ($)" style={inputStyle} />
+              <input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Deal description" style={inputStyle} />
+            </div>
+            <button onClick={handleAdd} className="btn-terminal" style={{ alignSelf: 'flex-start' }}>Add to pipeline</button>
+          </div>
+        </div>
+      )}
+
+      {/* Deal cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '16px' }}>
+        {(deals || []).map((deal: any) => (
+          <div key={deal.id} style={{ ...cardStyle, borderTop: `3px solid ${dealStatusColor[deal.status] || '#9aa1b1'}` }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '12px' }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: '1rem' }}>{deal.brand_name}</div>
+                <div className="eyebrow" style={{ marginTop: '4px' }}>{deal.brand_type} \u00b7 {deal.deal_type}</div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontFamily: 'var(--font-display)', fontSize: '1.4rem' }}>${deal.offer_amount?.toLocaleString()}</div>
+                <span className="status-chip" style={{ background: `${dealStatusColor[deal.status]}15`, color: dealStatusColor[deal.status], border: 'none' }}>
+                  {deal.status.replace(/_/g, ' ')}
+                </span>
+              </div>
+            </div>
+            {deal.description && <div style={{ fontSize: '0.8rem', color: 'var(--fg-3)', marginBottom: '12px', lineHeight: 1.5 }}>{deal.description}</div>}
+            {deal.analysis && (
+              <div style={{ marginTop: '8px', padding: '12px', background: 'var(--bg-sunken)', borderRadius: 'var(--r-sm)' }}>
+                <div style={{ display: 'flex', gap: '16px', marginBottom: '8px' }}>
+                  <div><span className="eyebrow">Fit</span> <strong style={{ color: deal.analysis.fit_score > 0.7 ? '#16a34a' : '#f59e0b' }}>{Math.round((deal.analysis.fit_score || 0) * 100)}%</strong></div>
+                  {deal.analysis.negotiated_amount && <div><span className="eyebrow">Counter</span> <strong style={{ color: 'var(--kit-fox)' }}>${deal.analysis.negotiated_amount?.toLocaleString()}</strong></div>}
+                </div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--fg-3)' }}>{deal.analysis.fit_reasoning?.slice(0, 150)}</div>
+                <div className="eyebrow" style={{ marginTop: '8px', color: 'var(--kit-fox)' }}>{deal.analysis.recommendation}</div>
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+              {deal.status === 'pending_analysis' && <button onClick={() => onAnalyze(deal.id)} className="btn-terminal" style={{ fontSize: '11px', padding: '6px 14px' }}>Analyze \u2192</button>}
+              {deal.status === 'analyzed' && <>
+                <button onClick={async () => { await fetchAPI(`/deals/${deal.id}/approve`, { method: 'POST' }); onReload(); }} className="btn-terminal" style={{ fontSize: '11px', padding: '6px 14px' }}>Approve</button>
+                <button onClick={async () => { await fetchAPI(`/deals/${deal.id}/decline`, { method: 'POST' }); onReload(); }} className="btn-outline" style={{ fontSize: '11px', padding: '6px 14px' }}>Decline</button>
+              </>}
             </div>
           </div>
-          <div style={{ marginBottom: '14px' }}>
-            <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '4px' }}>Description / Brief</label>
-            <textarea
-              value={newDeal.description}
-              onChange={(e) => setNewDeal({...newDeal, description: e.target.value})}
-              placeholder="What does the brand want? What content? What deliverables?"
-              rows={3}
-              style={{ ...inputStyle, resize: 'vertical' }}
-            />
+        ))}
+        {(!deals || deals.length === 0) && (
+          <div style={{ gridColumn: '1 / -1', padding: '48px', textAlign: 'center', background: 'var(--bg-sunken)', borderRadius: 'var(--r-md)' }}>
+            <div style={{ fontSize: '0.9rem', color: 'var(--fg-3)' }}>No deals yet. Add your first brand deal to get started.</div>
           </div>
-          <button onClick={addDeal} disabled={adding || !newDeal.brand_name.trim()} style={{
-            padding: '10px 24px', borderRadius: 8,
-            background: adding ? 'var(--color-surface-2)' : 'var(--color-accent)',
-            color: adding ? 'var(--color-text-muted)' : '#000',
-            border: 'none', cursor: adding ? 'wait' : 'pointer', fontWeight: 600, fontSize: '0.85rem',
-          }}>
-            {adding ? 'Adding...' : 'Add Deal →'}
-          </button>
-        </div>
-      )}
-
-      {/* Empty State */}
-      {pending.length === 0 && analyzed.length === 0 && !showAddForm && (
-        <div style={{
-          padding: '40px', textAlign: 'center', background: 'var(--color-surface)',
-          borderRadius: 12, border: '1px solid var(--color-border)',
-        }}>
-          <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>🤝</div>
-          <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '8px' }}>No deals yet</h3>
-          <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', marginBottom: '16px' }}>
-            Add a brand deal and the Deal Agent will analyze it — checking brand fit, benchmarking the price, and proposing a counter-offer.
-          </p>
-          <button onClick={() => setShowAddForm(true)} style={{
-            padding: '10px 24px', borderRadius: 8,
-            background: 'var(--color-accent)', color: '#000',
-            border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem',
-          }}>
-            + Add Your First Deal
-          </button>
-        </div>
-      )}
-
-      {pending.length > 0 && (
-        <div>
-          <h3 style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)', marginBottom: '12px' }}>PENDING ANALYSIS</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '16px' }}>
-            {pending.map((d: any) => (
-              <div key={d.id} style={{
-                background: 'var(--color-surface)',
-                border: '1px solid var(--color-border)',
-                borderRadius: 12, padding: '16px',
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
-                  <div style={{ fontWeight: 600, marginBottom: '4px' }}>{d.brand_name}</div>
-                  <button onClick={() => deleteDeal(d.id)} style={{
-                    background: 'none', border: 'none', color: 'var(--color-text-muted)',
-                    cursor: 'pointer', fontSize: '0.85rem', padding: '0 4px',
-                  }}>✕</button>
-                </div>
-                <div style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem', marginBottom: '8px' }}>
-                  {d.brand_type} · {d.deal_type} · ${d.offer_amount?.toLocaleString()}
-                </div>
-                <div style={{ fontSize: '0.8rem', marginBottom: '12px', color: 'var(--color-text-muted)' }}>
-                  {d.description}
-                </div>
-                <button onClick={() => onAnalyze(d.id)} style={{
-                  padding: '6px 14px', borderRadius: 6,
-                  background: 'var(--color-surface-2)', color: 'var(--color-accent)',
-                  border: '1px solid var(--color-accent)', cursor: 'pointer',
-                  fontSize: '0.75rem', fontWeight: 600,
-                }}>
-                  Run Deal Agent →
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {analyzed.length > 0 && (
-        <div>
-          <h3 style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)', marginBottom: '12px' }}>ANALYZED BY AGENT</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '16px' }}>
-            {analyzed.map((d: any) => (
-              <div key={d.id} style={{
-                background: 'var(--color-surface)',
-                border: `1px solid ${d.status === 'declined' ? 'rgba(248,113,113,0.2)' : d.status === 'approved' ? 'rgba(74,222,128,0.2)' : 'var(--color-border)'}`,
-                borderRadius: 12, padding: '16px',
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '8px' }}>
-                  <div style={{ fontWeight: 600 }}>{d.brand_name}</div>
-                  <Badge style={{
-                    background: d.status === 'declined' ? 'rgba(248,113,113,0.1)' : d.status === 'approved' ? 'rgba(74,222,128,0.1)' : 'rgba(251,191,36,0.1)',
-                    color: d.status === 'declined' ? 'var(--color-danger)' : d.status === 'approved' ? 'var(--color-success)' : 'var(--color-warning)',
-                    border: 'none',
-                  }}>{d.status}</Badge>
-                </div>
-                {d.fit_score !== null && d.fit_score !== undefined && (
-                  <div style={{ marginBottom: '8px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '4px' }}>
-                      <span>Brand Fit</span><span>{(d.fit_score * 100).toFixed(0)}%</span>
-                    </div>
-                    <div style={{ height: 4, background: 'var(--color-bg)', borderRadius: 2, overflow: 'hidden' }}>
-                      <div style={{
-                        width: `${d.fit_score * 100}%`, height: '100%',
-                        background: d.fit_score > 0.7 ? 'var(--color-success)' : d.fit_score > 0.45 ? 'var(--color-warning)' : 'var(--color-danger)',
-                      }} />
-                    </div>
-                  </div>
-                )}
-                {d.fit_reasoning && (
-                  <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', marginBottom: '8px' }}>
-                    {d.fit_reasoning}
-                  </div>
-                )}
-                {d.negotiated_amount && (
-                  <div style={{ fontSize: '0.8rem', marginTop: '8px', paddingTop: '8px', borderTop: '1px solid var(--color-border)' }}>
-                    <span style={{ color: 'var(--color-text-muted)' }}>Negotiated: </span>
-                    <span style={{ fontWeight: 600, color: 'var(--color-accent)' }}>${d.negotiated_amount.toLocaleString()}</span>
-                    {d.offer_amount && (
-                      <span style={{ color: 'var(--color-text-muted)', fontSize: '0.72rem', marginLeft: '8px' }}>
-                        (was ${d.offer_amount.toLocaleString()})
-                      </span>
-                    )}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
@@ -948,204 +643,89 @@ function DealsTab({ deals, onAnalyzeAll, onAnalyze, onReload }: any) {
 
 function ContentTab({ onReload }: { onReload: () => void }) {
   const [items, setItems] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [newContent, setNewContent] = useState({
-    title: '', content_type: 'post', brief: '', platform: 'instagram',
-  });
-  const [adding, setAdding] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ title: '', platform: 'instagram', content_type: 'post', brief: '', scheduled_date: '' });
 
-  const loadContent = useCallback(async () => {
-    try {
-      const d = await fetchAPI('/content');
-      setItems(d);
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); }
+  const loadItems = useCallback(async () => {
+    try { setItems(await fetchAPI('/content')); } catch {}
   }, []);
+  useEffect(() => { loadItems(); }, [loadItems]);
 
-  useEffect(() => { loadContent(); }, [loadContent]);
-
-  const draftContent = async (id: number) => {
-    await fetchAPI(`/agents/content/draft/${id}`, { method: 'POST' });
-    loadContent();
-    onReload();
+  const handleGenerate = async (id: number) => {
+    await fetchAPI(`/agents/content/generate/${id}`, { method: 'POST' });
+    loadItems(); onReload();
   };
 
-  const addContent = async () => {
-    if (!newContent.title.trim()) return;
-    setAdding(true);
-    try {
-      await fetchAPI('/content', {
-        method: 'POST',
-        body: JSON.stringify(newContent),
-      });
-      setNewContent({ title: '', content_type: 'post', brief: '', platform: 'instagram' });
-      setShowAddForm(false);
-      loadContent();
-      onReload();
-    } catch (e) { console.error(e); }
-    finally { setAdding(false); }
+  const handleAdd = async () => {
+    if (!form.title.trim()) return;
+    await fetchAPI('/content', { method: 'POST', body: JSON.stringify({
+      title: form.title, platform: form.platform, content_type: form.content_type,
+      brief: form.brief, scheduled_date: form.scheduled_date || null,
+    })});
+    setForm({ title: '', platform: 'instagram', content_type: 'post', brief: '', scheduled_date: '' });
+    setShowForm(false); loadItems(); onReload();
   };
 
-  const deleteContent = async (id: number) => {
-    await fetchAPI(`/content/${id}`, { method: 'DELETE' });
-    loadContent();
-    onReload();
-  };
-
-  if (loading) return <div style={{ color: 'var(--color-text-muted)' }}>Loading content...</div>;
+  const platformIcons: Record<string, string> = { instagram: '📸', youtube: '📹', tiktok: '🎬', twitter: '🕊️', blog: '📝', email: '📧' };
 
   return (
     <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h2 style={{ fontSize: '1.3rem' }}>Content Pipeline</h2>
-        <button onClick={() => setShowAddForm(!showAddForm)} style={{
-          padding: '8px 20px', borderRadius: 8,
-          background: showAddForm ? 'var(--color-surface-2)' : 'var(--color-surface)',
-          color: showAddForm ? 'var(--color-text-muted)' : 'var(--color-accent)',
-          border: showAddForm ? '1px solid var(--color-border)' : '1px solid var(--color-accent)',
-          cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem',
-        }}>
-          {showAddForm ? '✕ Cancel' : '+ Add Content'}
+        <div>
+          <div className="eyebrow" style={{ marginBottom: '8px' }}>Content pipeline</div>
+          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(32px, 4vw, 48px)' }}>Content</h1>
+        </div>
+        <button onClick={() => setShowForm(!showForm)} className="btn-outline" style={{ fontSize: '11px', padding: '10px 18px' }}>
+          {showForm ? 'Cancel' : '+ Add Brief'}
         </button>
       </div>
 
-      {/* Add Content Form */}
-      {showAddForm && (
-        <div className="slide-in" style={{
-          background: 'var(--color-surface)', border: '1px solid var(--color-accent)',
-          borderRadius: 12, padding: '20px',
-        }}>
-          <h3 style={{ fontSize: '0.95rem', fontWeight: 600, marginBottom: '14px' }}>Add Content Brief</h3>
-          <p style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', marginBottom: '14px' }}>
-            Enter a brief or idea. The Content Agent will draft the full content — optimized for the platform, with hashtags, captions, and notes.
-          </p>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
-            <div>
-              <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '4px' }}>Title *</label>
-              <input value={newContent.title} onChange={(e) => setNewContent({...newContent, title: e.target.value})} placeholder="e.g. Behind the scenes of our latest product launch" style={inputStyle} />
-            </div>
-            <div>
-              <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '4px' }}>Content Type</label>
-              <select value={newContent.content_type} onChange={(e) => setNewContent({...newContent, content_type: e.target.value})} style={inputStyle}>
-                <option value="post">Post</option>
-                <option value="video">Video</option>
-                <option value="reel">Reel</option>
-                <option value="story">Story</option>
-                <option value="carousel">Carousel</option>
+      {showForm && (
+        <div style={cardStyle}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Content title" style={inputStyle} />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+              <select value={form.platform} onChange={(e) => setForm({ ...form, platform: e.target.value })} style={inputStyle}>
+                {['instagram', 'youtube', 'tiktok', 'twitter', 'blog', 'email'].map(p => <option key={p} value={p}>{p}</option>)}
               </select>
-            </div>
-            <div>
-              <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '4px' }}>Platform</label>
-              <select value={newContent.platform} onChange={(e) => setNewContent({...newContent, platform: e.target.value})} style={inputStyle}>
-                <option value="instagram">Instagram</option>
-                <option value="youtube">YouTube</option>
-                <option value="tiktok">TikTok</option>
-                <option value="twitter">Twitter/X</option>
-                <option value="linkedin">LinkedIn</option>
-                <option value="blog">Blog</option>
+              <select value={form.content_type} onChange={(e) => setForm({ ...form, content_type: e.target.value })} style={inputStyle}>
+                {['post', 'reel', 'video', 'story', 'thread', 'article', 'newsletter'].map(t => <option key={t} value={t}>{t}</option>)}
               </select>
+              <input type="date" value={form.scheduled_date} onChange={(e) => setForm({ ...form, scheduled_date: e.target.value })} style={inputStyle} />
             </div>
+            <textarea value={form.brief} onChange={(e) => setForm({ ...form, brief: e.target.value })} placeholder="Brief — what should the content cover?" rows={3} style={{ ...inputStyle, resize: 'vertical' }} />
+            <button onClick={handleAdd} className="btn-terminal" style={{ alignSelf: 'flex-start' }}>Add brief</button>
           </div>
-          <div style={{ marginBottom: '14px' }}>
-            <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '4px' }}>Brief / Description</label>
-            <textarea
-              value={newContent.brief}
-              onChange={(e) => setNewContent({...newContent, brief: e.target.value})}
-              placeholder="What should the content be about? Key points, call-to-action, tone, any specific requirements..."
-              rows={4}
-              style={{ ...inputStyle, resize: 'vertical' }}
-            />
-          </div>
-          <button onClick={addContent} disabled={adding || !newContent.title.trim()} style={{
-            padding: '10px 24px', borderRadius: 8,
-            background: adding ? 'var(--color-surface-2)' : 'var(--color-accent)',
-            color: adding ? 'var(--color-text-muted)' : '#000',
-            border: 'none', cursor: adding ? 'wait' : 'pointer', fontWeight: 600, fontSize: '0.85rem',
-          }}>
-            {adding ? 'Adding...' : 'Add Content →'}
-          </button>
         </div>
       )}
 
-      {/* Empty State */}
-      {items.length === 0 && !showAddForm && (
-        <div style={{
-          padding: '40px', textAlign: 'center', background: 'var(--color-surface)',
-          borderRadius: 12, border: '1px solid var(--color-border)',
-        }}>
-          <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>✍️</div>
-          <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '8px' }}>No content yet</h3>
-          <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', marginBottom: '16px' }}>
-            Add a content brief and the Content Agent will draft the full post — optimized for the platform with hashtags, captions, and creator notes.
-          </p>
-          <button onClick={() => setShowAddForm(true)} style={{
-            padding: '10px 24px', borderRadius: 8,
-            background: 'var(--color-accent)', color: '#000',
-            border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem',
-          }}>
-            + Add Your First Content
-          </button>
-        </div>
-      )}
-
-      {/* Content Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '16px' }}>
-        {items.map((c: any) => (
-          <div key={c.id} style={{
-            background: 'var(--color-surface)',
-            border: '1px solid var(--color-border)',
-            borderRadius: 12, padding: '16px',
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '8px' }}>
-              <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{c.title}</div>
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <Badge style={{
-                  background: c.status === 'published' ? 'rgba(74,222,128,0.1)' : c.status === 'draft_ready' ? 'rgba(251,191,36,0.1)' : 'rgba(138,134,128,0.1)',
-                  color: c.status === 'published' ? 'var(--color-success)' : c.status === 'draft_ready' ? 'var(--color-warning)' : 'var(--color-text-muted)',
-                  border: 'none',
-                }}>{c.status.replace('_', ' ')}</Badge>
-                <button onClick={() => deleteContent(c.id)} style={{
-                  background: 'none', border: 'none', color: 'var(--color-text-muted)',
-                  cursor: 'pointer', fontSize: '0.85rem', padding: '0 4px',
-                }}>✕</button>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        {items.map((item: any) => (
+          <div key={item.id} style={{ ...cardStyle, display: 'flex', gap: '16px', alignItems: 'start' }}>
+            <div style={{ fontSize: '1.5rem' }}>{platformIcons[item.platform] || '📄'}</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                <strong style={{ fontSize: '0.9rem' }}>{item.title}</strong>
+                <span className="status-chip" style={{ background: 'var(--bg-sunken)', color: 'var(--fg-3)', border: 'none' }}>{item.platform} \u00b7 {item.content_type}</span>
               </div>
+              {item.brief && <div style={{ fontSize: '0.8rem', color: 'var(--fg-3)', marginBottom: '8px' }}>{item.brief}</div>}
+              {item.draft_content && (
+                <div style={{ padding: '12px', background: 'var(--bg-sunken)', borderRadius: 'var(--r-sm)', fontSize: '0.78rem', lineHeight: 1.6, color: 'var(--fg-2)', whiteSpace: 'pre-wrap', maxHeight: '200px', overflow: 'auto' }}>
+                  {item.draft_content}
+                </div>
+              )}
             </div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '8px' }}>
-              {c.platform} · {c.content_type}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {!item.draft_content && <button onClick={() => handleGenerate(item.id)} className="btn-terminal" style={{ fontSize: '10px', padding: '6px 12px' }}>Generate</button>}
+              <button onClick={async () => { await fetchAPI(`/content/${item.id}/publish`, { method: 'POST' }); loadItems(); }} className="btn-outline" style={{ fontSize: '10px', padding: '6px 12px' }}>Publish</button>
             </div>
-            {c.brief && (
-              <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginBottom: '8px' }}>
-                <strong>Brief:</strong> {c.brief.slice(0, 120)}{c.brief.length > 120 ? '...' : ''}
-              </div>
-            )}
-            {c.draft && (
-              <div style={{
-                background: 'var(--color-bg)', borderRadius: 8, padding: '12px',
-                fontSize: '0.8rem', marginBottom: '8px', whiteSpace: 'pre-wrap',
-                maxHeight: 200, overflow: 'auto',
-                border: '1px solid var(--color-border)',
-              }}>
-                {c.draft}
-              </div>
-            )}
-            {c.status === 'brief' && (
-              <button onClick={() => draftContent(c.id)} style={{
-                padding: '6px 14px', borderRadius: 6,
-                background: 'var(--color-surface-2)', color: 'var(--color-accent)',
-                border: '1px solid var(--color-accent)', cursor: 'pointer',
-                fontSize: '0.75rem', fontWeight: 600,
-              }}>
-                ✍️ Run Content Agent →
-              </button>
-            )}
-            {c.agent_reasoning && (
-              <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '8px', fontStyle: 'italic' }}>
-                {c.agent_reasoning}
-              </div>
-            )}
           </div>
         ))}
+        {items.length === 0 && (
+          <div style={{ padding: '48px', textAlign: 'center', background: 'var(--bg-sunken)', borderRadius: 'var(--r-md)', color: 'var(--fg-3)', fontSize: '0.9rem' }}>
+            No content briefs yet. Add a brief to let the Content Agent draft it.
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1156,158 +736,63 @@ function ContentTab({ onReload }: { onReload: () => void }) {
 // ═══════════════════════════════════════
 
 function StorefrontTab({ products, stats, onReload }: any) {
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [newProduct, setNewProduct] = useState({ title: '', description: '', price: '', category: '', image_emoji: '📦' });
-  const [adding, setAdding] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ name: '', price: '', description: '' });
 
-  const addProduct = async () => {
-    if (!newProduct.title.trim()) return;
-    setAdding(true);
-    try {
-      await fetchAPI('/products', {
-        method: 'POST',
-        body: JSON.stringify({
-          ...newProduct,
-          price: parseFloat(newProduct.price) || 0,
-          sales_count: 0,
-        }),
-      });
-      setNewProduct({ title: '', description: '', price: '', category: '', image_emoji: '📦' });
-      setShowAddForm(false);
-      onReload();
-    } catch (e) { console.error(e); }
-    finally { setAdding(false); }
-  };
-
-  const deleteProduct = async (id: number) => {
-    await fetchAPI(`/products/${id}`, { method: 'DELETE' });
-    onReload();
+  const handleAdd = async () => {
+    if (!form.name.trim()) return;
+    await fetchAPI('/products', { method: 'POST', body: JSON.stringify({
+      name: form.name, price: parseFloat(form.price) || 0, description: form.description,
+    })});
+    setForm({ name: '', price: '', description: '' });
+    setShowForm(false); onReload();
   };
 
   return (
     <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <h2 style={{ fontSize: '1.3rem' }}>Storefront</h2>
-          <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>Your products and digital goods</div>
+          <div className="eyebrow" style={{ marginBottom: '8px' }}>Digital storefront</div>
+          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(32px, 4vw, 48px)' }}>Storefront</h1>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>Total Revenue</div>
-            <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--color-accent)', fontFamily: 'var(--font-display)' }}>
-              ${stats.total_product_revenue.toLocaleString()}
-            </div>
-          </div>
-          <button onClick={() => setShowAddForm(!showAddForm)} style={{
-            padding: '8px 20px', borderRadius: 8,
-            background: showAddForm ? 'var(--color-surface-2)' : 'var(--color-surface)',
-            color: showAddForm ? 'var(--color-text-muted)' : 'var(--color-accent)',
-            border: showAddForm ? '1px solid var(--color-border)' : '1px solid var(--color-accent)',
-            cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem',
-          }}>
-            {showAddForm ? '✕ Cancel' : '+ Add Product'}
-          </button>
-        </div>
+        <button onClick={() => setShowForm(!showForm)} className="btn-outline" style={{ fontSize: '11px', padding: '10px 18px' }}>
+          {showForm ? 'Cancel' : '+ Add Product'}
+        </button>
       </div>
 
-      {/* Add Product Form */}
-      {showAddForm && (
-        <div className="slide-in" style={{
-          background: 'var(--color-surface)', border: '1px solid var(--color-accent)',
-          borderRadius: 12, padding: '20px',
-        }}>
-          <h3 style={{ fontSize: '0.95rem', fontWeight: 600, marginBottom: '14px' }}>Add a Product</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
-            <div>
-              <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '4px' }}>Title *</label>
-              <input value={newProduct.title} onChange={(e) => setNewProduct({...newProduct, title: e.target.value})} placeholder="e.g. Ultimate Guide to X" style={inputStyle} />
+      {showForm && (
+        <div style={cardStyle}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px', gap: '12px' }}>
+              <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Product name" style={inputStyle} />
+              <input type="number" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} placeholder="Price ($)" style={inputStyle} />
             </div>
-            <div>
-              <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '4px' }}>Price ($)</label>
-              <input type="number" value={newProduct.price} onChange={(e) => setNewProduct({...newProduct, price: e.target.value})} placeholder="49" style={inputStyle} />
-            </div>
-            <div>
-              <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '4px' }}>Category</label>
-              <input value={newProduct.category} onChange={(e) => setNewProduct({...newProduct, category: e.target.value})} placeholder="e.g. course, ebook, template" style={inputStyle} />
-            </div>
-            <div>
-              <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '4px' }}>Emoji Icon</label>
-              <input value={newProduct.image_emoji} onChange={(e) => setNewProduct({...newProduct, image_emoji: e.target.value})} placeholder="📦" style={{ ...inputStyle, maxWidth: 60 }} />
-            </div>
+            <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Product description" rows={2} style={{ ...inputStyle, resize: 'vertical' }} />
+            <button onClick={handleAdd} className="btn-terminal" style={{ alignSelf: 'flex-start' }}>Add product</button>
           </div>
-          <div style={{ marginBottom: '14px' }}>
-            <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '4px' }}>Description</label>
-            <textarea value={newProduct.description} onChange={(e) => setNewProduct({...newProduct, description: e.target.value})} placeholder="What is this product about?" rows={2} style={{ ...inputStyle, resize: 'vertical' }} />
-          </div>
-          <button onClick={addProduct} disabled={adding || !newProduct.title.trim()} style={{
-            padding: '10px 24px', borderRadius: 8,
-            background: adding ? 'var(--color-surface-2)' : 'var(--color-accent)',
-            color: adding ? 'var(--color-text-muted)' : '#000',
-            border: 'none', cursor: adding ? 'wait' : 'pointer', fontWeight: 600, fontSize: '0.85rem',
-          }}>
-            {adding ? 'Adding...' : 'Add Product →'}
-          </button>
         </div>
       )}
 
-      {/* Products Grid */}
-      {products.length === 0 && !showAddForm ? (
-        <div style={{
-          padding: '40px', textAlign: 'center', background: 'var(--color-surface)',
-          borderRadius: 12, border: '1px solid var(--color-border)',
-        }}>
-          <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>📦</div>
-          <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '8px' }}>No products yet</h3>
-          <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', marginBottom: '16px' }}>
-            Add your digital products, courses, or services to track sales and revenue.
-          </p>
-          <button onClick={() => setShowAddForm(true)} style={{
-            padding: '10px 24px', borderRadius: 8,
-            background: 'var(--color-accent)', color: '#000',
-            border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem',
-          }}>
-            + Add Your First Product
-          </button>
-        </div>
-      ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '16px' }}>
-          {products.map((p: any) => (
-            <div key={p.id} style={{
-              background: 'var(--color-surface)',
-              border: '1px solid var(--color-border)',
-              borderRadius: 12, overflow: 'hidden',
-            }}>
-              <div style={{
-                height: 100, background: 'var(--color-surface-2)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: '2.5rem', position: 'relative',
-              }}>
-                {p.image_emoji}
-                <button onClick={() => deleteProduct(p.id)} style={{
-                  position: 'absolute', top: 8, right: 8,
-                  background: 'rgba(0,0,0,0.5)', border: 'none', borderRadius: 6,
-                  color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: '0.8rem',
-                  padding: '2px 8px',
-                }}>✕</button>
-              </div>
-              <div style={{ padding: '16px' }}>
-                <div style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: '4px' }}>{p.title}</div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '12px' }}>
-                  {p.description?.slice(0, 80)}{p.description?.length > 80 ? '...' : ''}
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ fontWeight: 700, fontSize: '1.1rem', color: 'var(--color-accent)' }}>
-                    ${p.price}
-                  </div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                    {p.sales_count.toLocaleString()} sold
-                  </div>
-                </div>
-              </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px' }}>
+        {(products || []).map((p: any) => (
+          <div key={p.id} style={cardStyle}>
+            <div style={{ height: '120px', background: 'var(--kit-gradient)', borderRadius: 'var(--r-sm)', marginBottom: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <span style={{ fontSize: '2rem' }}>📄</span>
             </div>
-          ))}
-        </div>
-      )}
+            <div style={{ fontWeight: 700, fontSize: '0.95rem', marginBottom: '4px' }}>{p.name}</div>
+            {p.description && <div style={{ fontSize: '0.78rem', color: 'var(--fg-3)', marginBottom: '8px', lineHeight: 1.5 }}>{p.description}</div>}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: '1.4rem' }}>${p.price}</div>
+              <div className="eyebrow">{p.units_sold || 0} sold</div>
+            </div>
+          </div>
+        ))}
+        {(!products || products.length === 0) && (
+          <div style={{ gridColumn: '1 / -1', padding: '48px', textAlign: 'center', background: 'var(--bg-sunken)', borderRadius: 'var(--r-md)', color: 'var(--fg-3)', fontSize: '0.9rem' }}>
+            No products yet. Add your first digital product.
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -1321,62 +806,35 @@ function MemoryTab({ patterns, onLearn }: any) {
     <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <h2 style={{ fontSize: '1.3rem' }}>Performance Memory</h2>
-          <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
-            Patterns learned from your deal history and content performance
-          </div>
+          <div className="eyebrow" style={{ marginBottom: '8px' }}>Agent memory</div>
+          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(32px, 4vw, 48px)' }}>Memory</h1>
         </div>
-        <button onClick={onLearn} style={{
-          padding: '8px 20px', borderRadius: 8,
-          background: 'var(--color-accent)', color: '#000',
-          border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem',
-        }}>
-          🧠 Run Memory Agent
+        <button onClick={onLearn} className="btn-terminal" style={{ fontSize: '11px', padding: '10px 18px' }}>
+          Learn Patterns \u2192
         </button>
       </div>
 
-      {patterns.length === 0 ? (
-        <div style={{
-          padding: '40px', textAlign: 'center', background: 'var(--color-surface)',
-          borderRadius: 12, border: '1px solid var(--color-border)',
-        }}>
-          <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>🧠</div>
-          <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '8px' }}>No patterns learned yet</h3>
-          <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', marginBottom: '16px' }}>
-            The Memory Agent analyzes your deals and content to extract patterns — what brands fit best, what price ranges work, what content performs.
-            <br/><br/>
-            Add some deals and content first, then run the Memory Agent to learn from them.
-          </p>
-        </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          {patterns.map((p: any) => (
-            <div key={p.id} style={{
-              background: 'var(--color-surface)',
-              border: '1px solid var(--color-border)',
-              borderRadius: 12, padding: '16px',
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '8px' }}>
-                <div>
-                  <Badge style={{
-                    background: 'rgba(255,87,34,0.1)', color: 'var(--color-accent)', border: 'none',
-                  }}>{p.pattern_type.replace('_', ' ')}</Badge>
-                  <span style={{ marginLeft: '8px', fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
-                    {p.pattern_key}
-                  </span>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>{p.pattern_value}</div>
-                  <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>
-                    {p.sample_count} samples · {(p.confidence * 100).toFixed(0)}% confidence
-                  </div>
-                </div>
-              </div>
-              <div style={{ fontSize: '0.82rem', color: 'var(--color-text)' }}>{p.insight}</div>
+      <p style={{ fontSize: 'var(--fs-body)', color: 'var(--fg-3)', maxWidth: '60ch' }}>
+        The Memory Agent analyzes all deals, content, and outcomes to extract patterns. These insights inform future agent decisions.
+      </p>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        {(patterns || []).map((p: any, i: number) => (
+          <div key={i} style={{ ...cardStyle, borderLeft: `3px solid var(--kit-fox)` }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+              <span className="eyebrow">{p.category || 'insight'}</span>
+              <span className="mono" style={{ fontSize: '0.68rem', color: 'var(--fg-mute)' }}>{new Date(p.created_at).toLocaleDateString()}</span>
             </div>
-          ))}
-        </div>
-      )}
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: '1.1rem', marginBottom: '8px' }}>{p.insight}</div>
+            {p.evidence && <div style={{ fontSize: '0.8rem', color: 'var(--fg-3)', lineHeight: 1.5 }}>{p.evidence}</div>}
+          </div>
+        ))}
+        {(!patterns || patterns.length === 0) && (
+          <div style={{ padding: '48px', textAlign: 'center', background: 'var(--bg-sunken)', borderRadius: 'var(--r-md)', color: 'var(--fg-3)', fontSize: '0.9rem' }}>
+            No patterns yet. Run the Memory Agent to analyze your deals and content.
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -1391,187 +849,117 @@ function AgentsTab({ activities, thinking }: any) {
   const [autopilotMsg, setAutopilotMsg] = useState('');
 
   const loadTeam = useCallback(async () => {
-    try {
-      const team = await fetchAPI('/agents/team');
-      setAgentTeam(team);
-    } catch {}
+    try { setAgentTeam(await fetchAPI('/agents/team')); } catch {}
   }, []);
+  useEffect(() => { loadTeam(); const int = setInterval(loadTeam, 5000); return () => clearInterval(int); }, [loadTeam]);
 
-  useEffect(() => { loadTeam(); }, [loadTeam]);
-
-  const agentInfo = [
-    { name: 'deal_agent', display: 'Deal Agent', icon: '🤝', type: 'expert', desc: 'Researches brands on the web, analyzes market rates, scores brand fit, negotiates counter-offers, generates proposal documents' },
-    { name: 'content_agent', display: 'Content Agent', icon: '✍️', type: 'expert', desc: 'Researches trending topics, searches YouTube, writes full platform-optimized drafts, generates content calendars' },
-    { name: 'finance_agent', display: 'Finance Agent', icon: '💰', type: 'expert', desc: 'Auto-generates invoices, creates real Stripe invoices, researches tax rates, generates financial reports' },
-    { name: 'memory_agent', display: 'Memory Agent', icon: '🧠', type: 'expert', desc: 'Analyzes all deals and content, researches industry trends, extracts patterns, stores insights' },
-    { name: 'strategy_agent', display: 'Strategy Agent', icon: '🎯', type: 'expert', desc: 'Analyzes market trends, identifies growth opportunities, plans content and business strategy' },
-    { name: 'outreach_agent', display: 'Outreach Agent', icon: '📬', type: 'expert', desc: 'Finds potential brand partners, researches them, sends outreach emails and Instagram DMs' },
-    { name: 'publisher_agent', display: 'Publisher Agent', icon: '📱', type: 'worker', desc: 'Posts content to connected platforms (Instagram, YouTube, Twitter) at scheduled times' },
-    { name: 'email_agent', display: 'Email Agent', icon: '📧', type: 'worker', desc: 'Sends real emails to brands, clients, and partners via SMTP' },
-    { name: 'contract_agent', display: 'Contract Agent', icon: '📋', type: 'worker', desc: 'Generates legal documents, contracts, and proposals' },
-    { name: 'analytics_agent', display: 'Analytics Agent', icon: '📊', type: 'worker', desc: 'Tracks performance metrics across all connected platforms' },
-    { name: 'scheduler_agent', display: 'Scheduler Agent', icon: '📅', type: 'worker', desc: 'Manages content calendar, schedules posts and deliverables' },
-    { name: 'notification_agent', display: 'Notification Agent', icon: '🔔', type: 'worker', desc: 'Sends alerts via Slack, Discord, or Telegram' },
-  ];
+  const runAgent = async (name: string) => {
+    try { await fetchAPI(`/agents/${name}/run`, { method: 'POST' }); setAutopilotMsg(`${name} executed`); setTimeout(loadTeam, 2000); }
+    catch { setAutopilotMsg(`${name} running...`); }
+  };
 
   const runAutopilot = async () => {
     setRunningAutopilot(true);
-    setAutopilotMsg('🚀 Running autonomous pipeline: Memory → Strategy → Analytics...');
-    try {
-      const result = await fetchAPI('/agents/autopilot', { method: 'POST' });
-      setAutopilotMsg('✅ Autopilot complete! All agents executed.');
-    } catch (e: any) {
-      setAutopilotMsg(`⚠️ Autopilot started (running in background)`);
-    }
-    setRunningAutopilot(false);
-    setTimeout(() => loadTeam(), 3000);
+    setAutopilotMsg('Running pipeline: Memory \u2192 Strategy \u2192 Analytics...');
+    try { await fetchAPI('/agents/autopilot', { method: 'POST' }); setAutopilotMsg('Autopilot complete.'); }
+    catch { setAutopilotMsg('Pipeline started (running in background).'); }
+    setRunningAutopilot(false); setTimeout(loadTeam, 3000);
   };
 
-  const runAgent = async (agentName: string) => {
-    try {
-      await fetchAPI(`/agents/${agentName}/run`, { method: 'POST' });
-      setAutopilotMsg(`✅ ${agentName} executed`);
-      setTimeout(() => loadTeam(), 2000);
-    } catch (e: any) {
-      setAutopilotMsg(`⚠️ ${agentName} running...`);
-    }
+  const expertAgents = [
+    { name: 'deal_agent', display: 'Deal Agent', icon: '🤝', desc: 'Researches brands, negotiates, generates contracts' },
+    { name: 'content_agent', display: 'Content Agent', icon: '\u270D️', desc: 'Researches trends, writes content drafts' },
+    { name: 'finance_agent', display: 'Finance Agent', icon: '💰', desc: 'Creates Stripe invoices, manages payments' },
+    { name: 'memory_agent', display: 'Memory Agent', icon: '🧠', desc: 'Learns from outcomes, stores patterns' },
+    { name: 'strategy_agent', display: 'Strategy Agent', icon: '🎯', desc: 'Analyzes market, plans growth' },
+    { name: 'outreach_agent', display: 'Outreach Agent', icon: '📬', desc: 'Finds brands, sends DMs/emails' },
+  ];
+  const workerAgents = [
+    { name: 'publisher_agent', display: 'Publisher', icon: '📱', desc: 'Posts to Instagram, YouTube, Twitter' },
+    { name: 'email_agent', display: 'Email', icon: '📧', desc: 'Sends real emails via SMTP' },
+    { name: 'contract_agent', display: 'Contract', icon: '📋', desc: 'Generates legal documents' },
+    { name: 'analytics_agent', display: 'Analytics', icon: '📊', desc: 'Tracks metrics across platforms' },
+    { name: 'scheduler_agent', display: 'Scheduler', icon: '📅', desc: 'Manages content calendar' },
+    { name: 'notification_agent', display: 'Notification', icon: '🔔', desc: 'Sends Slack/Discord/Telegram alerts' },
+  ];
+
+  const AgentCard = ({ a }: { a: any }) => {
+    const td = agentTeam?.agents?.find((t: any) => t.name === a.name);
+    return (
+      <div style={{ ...cardStyle, borderColor: td?.last_active ? 'var(--kit-fox)' : 'var(--border)', padding: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+          <span style={{ fontSize: '1.3rem' }}>{a.icon}</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>{a.display}</div>
+            <div style={{ fontSize: '0.65rem', color: td?.last_active ? '#16a34a' : 'var(--fg-mute)' }}>
+              {td?.last_active ? `\u25CF ${td.total_activities} runs` : '\u25CB never run'}
+            </div>
+          </div>
+        </div>
+        <div style={{ fontSize: '0.74rem', color: 'var(--fg-3)', marginBottom: '10px', lineHeight: 1.5 }}>{a.desc}</div>
+        <button onClick={() => runAgent(a.name)} className="btn-outline" style={{ width: '100%', fontSize: '10px', padding: '6px', justifyContent: 'center' }}>Run \u2192</button>
+      </div>
+    );
   };
 
   return (
     <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h2 style={{ fontSize: '1.3rem' }}>Agent Team</h2>
-        <button
-          onClick={runAutopilot}
-          disabled={runningAutopilot}
-          style={{
-            padding: '10px 20px', background: runningAutopilot ? 'var(--color-surface)' : 'var(--color-accent)',
-            border: 'none', borderRadius: 8, color: '#fff', cursor: runningAutopilot ? 'wait' : 'pointer',
-            fontSize: '0.85rem', fontWeight: 600,
-          }}
-        >
-          {runningAutopilot ? '⏳ Running...' : '🚀 Run Autopilot'}
+        <div>
+          <div className="eyebrow" style={{ marginBottom: '8px' }}>Agentic team</div>
+          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(32px, 4vw, 48px)' }}>Agent Team</h1>
+        </div>
+        <button onClick={runAutopilot} disabled={runningAutopilot} className="btn-terminal" style={{ fontSize: '12px' }}>
+          {runningAutopilot ? 'Running...' : 'Run Autopilot \u2192'}
         </button>
       </div>
 
       {autopilotMsg && (
-        <div style={{ padding: '12px 16px', background: 'var(--color-surface)', borderRadius: 8, fontSize: '0.85rem', border: '1px solid var(--color-border)' }}>
+        <div style={{ padding: '12px 16px', background: 'var(--bg-sunken)', borderRadius: 'var(--r-sm)', fontSize: '0.82rem', border: '1px solid var(--border)' }}>
           {autopilotMsg}
         </div>
       )}
 
-      {/* How It Works */}
-      <div style={{
-        background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-        borderRadius: 12, padding: '20px',
-      }}>
-        <h3 style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '10px' }}>How It Works — The 2030 Vision, Live</h3>
-        <div style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)', lineHeight: 1.7 }}>
-          <strong>12 AI agents</strong> work together as a full autonomous company — {agentTeam?.expert_count || 6} expert agents (strategic) and {agentTeam?.worker_count || 6} worker agents (execution).
-          Each agent uses a <strong>ReAct loop</strong> to plan, execute real tools, and analyze results.
-          Agents delegate tasks to each other, run on schedules, and take <strong>real actions</strong> on connected platforms — post to Instagram, upload to YouTube, send emails, create Stripe invoices.
-          The creator approves only what matters; everything else is autonomous.
-        </div>
+      {/* How it works */}
+      <div style={cardStyle}>
+        <div className="eyebrow" style={{ marginBottom: '10px' }}>The 2030 vision, live</div>
+        <p style={{ fontSize: '0.82rem', color: 'var(--fg-3)', lineHeight: 1.7 }}>
+          <strong style={{ color: 'var(--fg)' }}>12 AI agents</strong> work as a full autonomous company. {agentTeam?.expert_count || 6} expert agents (strategic) and {agentTeam?.worker_count || 6} worker agents (execution). Each uses a ReAct loop to plan, execute real tools, and analyze results. Agents delegate tasks to each other and take real actions on connected platforms.
+        </p>
         <div style={{ marginTop: '12px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-          {['🌐 web_search', '📺 youtube_search', '📊 market_rate_research', '📸 instagram_post', '📤 youtube_upload', '📧 send_email', '💳 stripe_invoice', '🐦 twitter_post', '📅 create_calendar_event', '🔔 send_notification', '🤝 delegate_to_agent'].map(t => (
-            <code key={t} style={{ fontSize: '0.68rem', padding: '3px 8px', background: 'var(--color-bg)', borderRadius: 4, color: 'var(--color-text-muted)' }}>{t}</code>
+          {['web_search', 'instagram_post', 'youtube_upload', 'send_email', 'stripe_invoice', 'twitter_post', 'send_notification', 'delegate_to_agent'].map(t => (
+            <code key={t} className="mono" style={{ fontSize: '0.65rem', padding: '3px 8px', background: 'var(--bg-sunken)', borderRadius: 'var(--r-xs)', color: 'var(--fg-3)' }}>{t}</code>
           ))}
         </div>
       </div>
 
       {/* Expert Agents */}
       <div>
-        <h3 style={{ fontSize: '0.95rem', fontWeight: 600, marginBottom: '12px' }}>🧠 Expert Agents</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '14px' }}>
-          {agentInfo.filter(a => a.type === 'expert').map(a => {
-            const teamData = agentTeam?.agents?.find((t: any) => t.name === a.name);
-            return (
-              <div key={a.name} style={{
-                background: 'var(--color-surface)', border: teamData?.last_active ? '1px solid var(--color-accent)' : '1px solid var(--color-border)',
-                borderRadius: 12, padding: '16px',
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-                  <span style={{ fontSize: '1.3rem' }}>{a.icon}</span>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 700, fontSize: '0.88rem' }}>{a.display}</div>
-                    <div style={{ fontSize: '0.65rem', color: teamData?.last_active ? '#4caf50' : 'var(--color-text-muted)' }}>
-                      {teamData?.last_active ? `● Active · ${teamData.total_activities} runs` : '○ Never run'}
-                    </div>
-                  </div>
-                </div>
-                <div style={{ fontSize: '0.76rem', color: 'var(--color-text-muted)', marginBottom: '10px', lineHeight: 1.5 }}>
-                  {a.desc}
-                </div>
-                <button
-                  onClick={() => runAgent(a.name)}
-                  style={{ width: '100%', padding: '6px', background: 'var(--color-accent)', border: 'none', borderRadius: 6, color: '#fff', cursor: 'pointer', fontSize: '0.75rem' }}
-                >Run Agent →</button>
-              </div>
-            );
-          })}
+        <div className="eyebrow" style={{ marginBottom: '12px' }}>Strategic decision-makers</div>
+        <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(20px, 2.5vw, 28px)', marginBottom: '16px' }}>Expert Agents</h2>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '12px' }}>
+          {expertAgents.map(a => <AgentCard key={a.name} a={a} />)}
         </div>
       </div>
 
       {/* Worker Agents */}
       <div>
-        <h3 style={{ fontSize: '0.95rem', fontWeight: 600, marginBottom: '12px' }}>⚙️ Worker Agents</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '14px' }}>
-          {agentInfo.filter(a => a.type === 'worker').map(a => {
-            const teamData = agentTeam?.agents?.find((t: any) => t.name === a.name);
-            return (
-              <div key={a.name} style={{
-                background: 'var(--color-surface)', border: teamData?.last_active ? '1px solid var(--color-accent)' : '1px solid var(--color-border)',
-                borderRadius: 12, padding: '16px',
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-                  <span style={{ fontSize: '1.3rem' }}>{a.icon}</span>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 700, fontSize: '0.88rem' }}>{a.display}</div>
-                    <div style={{ fontSize: '0.65rem', color: teamData?.last_active ? '#4caf50' : 'var(--color-text-muted)' }}>
-                      {teamData?.last_active ? `● Active · ${teamData.total_activities} runs` : '○ Never run'}
-                    </div>
-                  </div>
-                </div>
-                <div style={{ fontSize: '0.76rem', color: 'var(--color-text-muted)', marginBottom: '10px', lineHeight: 1.5 }}>
-                  {a.desc}
-                </div>
-                <button
-                  onClick={() => runAgent(a.name)}
-                  style={{ width: '100%', padding: '6px', background: 'var(--color-accent)', border: 'none', borderRadius: 6, color: '#fff', cursor: 'pointer', fontSize: '0.75rem' }}
-                >Run Agent →</button>
-              </div>
-            );
-          })}
+        <div className="eyebrow" style={{ marginBottom: '12px' }}>Real-world execution</div>
+        <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(20px, 2.5vw, 28px)', marginBottom: '16px' }}>Worker Agents</h2>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '12px' }}>
+          {workerAgents.map(a => <AgentCard key={a.name} a={a} />)}
         </div>
       </div>
 
-      {/* Live Thinking */}
-      {thinking && thinking.length > 0 && (
-        <div>
-          <h3 style={{ fontSize: '0.95rem', fontWeight: 600, marginBottom: '12px' }}>Live Agent Thinking</h3>
-          <div style={{ background: 'var(--color-surface)', borderRadius: 12, padding: '16px', maxHeight: '400px', overflow: 'auto', border: '1px solid var(--color-border)' }}>
-            {thinking.map((t: any, i: number) => (
-              <div key={i} style={{ padding: '6px 0', borderBottom: i < thinking.length - 1 ? '1px solid var(--color-border)' : 'none' }}>
-                <span style={{ fontSize: '0.8rem' }}>
-                  <span style={{ color: 'var(--color-accent)' }}>{(PHASE_ICONS as any)[t.phase] || '🔹'}</span>
-                  <span style={{ color: 'var(--color-text-muted)', fontSize: '0.7rem', margin: '0 6px' }}>[{t.agent_name}]</span>
-                  {t.thought}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Activity Feed */}
+      {/* Recent Activity */}
       <div>
-        <h3 style={{ fontSize: '0.95rem', fontWeight: 600, marginBottom: '12px' }}>Recent Activity</h3>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          {activities.slice(0, 15).map((a: any, i: number) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', background: 'var(--color-surface)', borderRadius: 8, fontSize: '0.78rem' }}>
-              <Badge style={{ background: 'rgba(255,87,34,0.1)', color: 'var(--color-accent)', border: 'none', fontSize: '0.6rem' }}>{a.agent_name}</Badge>
-              <span>{a.summary}</span>
-              <span style={{ marginLeft: 'auto', color: 'var(--color-text-muted)', fontSize: '0.68rem' }}>{new Date(a.created_at).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}</span>
+        <div className="eyebrow" style={{ marginBottom: '12px' }}>Agent activity</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          {(activities || []).slice(0, 15).map((a: any, i: number) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 14px', background: 'var(--bg-sunken)', borderRadius: 'var(--r-sm)', fontSize: '0.78rem' }}>
+              <span className="mono" style={{ fontSize: '0.62rem', color: 'var(--kit-fox)', textTransform: 'uppercase' }}>{a.agent_name}</span>
+              <span style={{ flex: 1, color: 'var(--fg-2)' }}>{a.summary}</span>
+              <span className="mono" style={{ color: 'var(--fg-mute)', fontSize: '0.62rem' }}>{new Date(a.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
             </div>
           ))}
         </div>
@@ -1585,105 +973,51 @@ function AgentsTab({ activities, thinking }: any) {
 // ═══════════════════════════════════════
 
 function DocumentsTab({ documents, onReload }: any) {
-  const [selectedDoc, setSelectedDoc] = useState<any>(null);
+  const [selected, setSelected] = useState<any>(null);
 
   return (
     <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       <div>
-        <h2 style={{ fontSize: '1.3rem' }}>Generated Documents</h2>
-        <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginTop: '4px' }}>
-          Documents automatically generated by agents — contracts, proposals, invoices, reports
-        </div>
+        <div className="eyebrow" style={{ marginBottom: '8px' }}>Generated by agents</div>
+        <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(32px, 4vw, 48px)' }}>Documents</h1>
       </div>
 
-      {documents.length === 0 ? (
-        <div style={{
-          padding: '40px', textAlign: 'center', background: 'var(--color-surface)',
-          borderRadius: 12, border: '1px solid var(--color-border)',
-        }}>
-          <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>📄</div>
-          <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '8px' }}>No documents yet</h3>
-          <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
-            When agents process deals and content, they automatically generate documents like
-            counter-offer proposals, contracts, invoices, and content strategy reports.
-            <br/><br/>
-            Add a deal and run the Deal Agent to see documents appear here.
-          </p>
-        </div>
-      ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '16px' }}>
-          {/* Document List */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {documents.map((d: any) => (
-              <div
-                key={d.id}
-                onClick={() => setSelectedDoc(d)}
-                style={{
-                  background: selectedDoc?.id === d.id ? 'var(--color-surface-2)' : 'var(--color-surface)',
-                  border: selectedDoc?.id === d.id ? '1px solid var(--color-accent)' : '1px solid var(--color-border)',
-                  borderRadius: 12, padding: '14px', cursor: 'pointer',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                  <span style={{ fontSize: '1.1rem' }}>
-                    {d.doc_type === 'contract' ? '📋' : d.doc_type === 'proposal' ? '📝' :
-                     d.doc_type === 'invoice' ? '💰' : d.doc_type === 'report' ? '📊' :
-                     d.doc_type === 'email' ? '📧' : '📄'}
-                  </span>
-                  <Badge style={{
-                    background: 'rgba(255,87,34,0.1)', color: 'var(--color-accent)', border: 'none',
-                    fontSize: '0.65rem', textTransform: 'uppercase',
-                  }}>{d.doc_type}</Badge>
+      <div style={{ display: 'grid', gridTemplateColumns: selected ? '1fr 1fr' : '1fr', gap: '16px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {(documents || []).map((doc: any) => (
+            <div key={doc.id} onClick={() => setSelected(doc)} style={{ ...cardStyle, cursor: 'pointer', borderLeft: '3px solid var(--kit-fox)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div className="eyebrow" style={{ marginBottom: '4px' }}>{doc.doc_type}</div>
+                  <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{doc.title}</div>
                 </div>
-                <div style={{ fontWeight: 600, fontSize: '0.82rem', marginBottom: '4px' }}>{d.title}</div>
-                <div style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)' }}>
-                  {new Date(d.created_at).toLocaleDateString()} · {new Date(d.created_at).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}
-                </div>
+                <span style={{ fontSize: '1.2rem' }}>📄</span>
               </div>
-            ))}
-          </div>
+            </div>
+          ))}
+          {(!documents || documents.length === 0) && (
+            <div style={{ padding: '48px', textAlign: 'center', background: 'var(--bg-sunken)', borderRadius: 'var(--r-md)', color: 'var(--fg-3)', fontSize: '0.9rem' }}>
+              No documents yet. Agents generate proposals, invoices, and contracts when deals are analyzed.
+            </div>
+          )}
+        </div>
 
-          {/* Document Preview */}
-          <div style={{
-            background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-            borderRadius: 12, padding: '24px', minHeight: '400px',
-          }}>
-            {selectedDoc ? (
-              <div>
-                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '8px' }}>{selectedDoc.title}</h3>
-                <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
-                  <Badge style={{ background: 'rgba(255,87,34,0.1)', color: 'var(--color-accent)', border: 'none' }}>
-                    {selectedDoc.doc_type}
-                  </Badge>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                    Generated: {new Date(selectedDoc.created_at).toLocaleString()}
-                  </span>
-                </div>
-                <div style={{
-                  background: 'var(--color-bg)', borderRadius: 8, padding: '20px',
-                  fontSize: '0.85rem', lineHeight: 1.7, whiteSpace: 'pre-wrap',
-                  maxHeight: '500px', overflow: 'auto', border: '1px solid var(--color-border)',
-                }}>
-                  {selectedDoc.content}
-                </div>
-              </div>
-            ) : (
-              <div style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                height: '400px', color: 'var(--color-text-muted)', fontSize: '0.85rem',
-              }}>
-                Select a document to preview
-              </div>
-            )}
+        {selected && (
+          <div style={{ ...cardStyle, position: 'sticky', top: '80px', maxHeight: '70vh', overflow: 'auto' }}>
+            <div className="eyebrow" style={{ marginBottom: '8px' }}>{selected.doc_type}</div>
+            <h3 style={{ fontFamily: 'var(--font-display)', fontSize: '1.2rem', marginBottom: '16px' }}>{selected.title}</h3>
+            <div style={{ fontSize: '0.82rem', lineHeight: 1.7, color: 'var(--fg-2)', whiteSpace: 'pre-wrap' }}>
+              {selected.content}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
 
 // ═══════════════════════════════════════
-// PLATFORMS TAB (Real-world connections)
+// PLATFORMS TAB
 // ═══════════════════════════════════════
 
 function PlatformsTab() {
@@ -1694,37 +1028,23 @@ function PlatformsTab() {
   const [msg, setMsg] = useState('');
 
   const loadPlatforms = useCallback(async () => {
-    const [p, a] = await Promise.all([
-      fetchAPI('/platforms'),
-      fetchAPI('/platforms/actions?limit=20'),
-    ]);
-    setPlatforms(p.platforms || []);
-    setActions(a.actions || []);
+    try {
+      const [p, a] = await Promise.all([fetchAPI('/platforms'), fetchAPI('/platforms/actions?limit=20')]);
+      setPlatforms(p.platforms || []); setActions(a.actions || []);
+    } catch {}
   }, []);
-
   useEffect(() => { loadPlatforms(); }, [loadPlatforms]);
 
   const handleConnect = async (platform: string, fields: string[]) => {
     const credentials: Record<string, string> = {};
     for (const f of fields) {
       credentials[f] = credForm[`${platform}_${f}`] || '';
-      if (!credentials[f]) {
-        setMsg(`Please fill in ${f}`);
-        return;
-      }
+      if (!credentials[f]) { setMsg(`Please fill in ${f}`); return; }
     }
     try {
-      await fetchAPI('/platforms/connect', {
-        method: 'POST',
-        body: JSON.stringify({ platform, credentials }),
-      });
-      setMsg(`✅ ${platform} connected successfully!`);
-      setCredForm({});
-      setConnecting(null);
-      loadPlatforms();
-    } catch (e: any) {
-      setMsg(`❌ Failed: ${e.message}`);
-    }
+      await fetchAPI('/platforms/connect', { method: 'POST', body: JSON.stringify({ platform, credentials }) });
+      setMsg(`${platform} connected.`); setCredForm({}); setConnecting(null); loadPlatforms();
+    } catch (e: any) { setMsg(`Failed: ${e.message}`); }
   };
 
   const handleDisconnect = async (platform: string) => {
@@ -1734,103 +1054,75 @@ function PlatformsTab() {
 
   const platformInfo: Record<string, { icon: string; desc: string; fields: string[]; help: string }> = {
     instagram: { icon: '📸', desc: 'Post photos, reels, stories. Send DMs. Get insights.', fields: ['username', 'password'], help: 'Instagram username and password' },
-    youtube: { icon: '📺', desc: 'Upload videos. Get analytics. Reply to comments.', fields: ['client_id', 'client_secret', 'access_token', 'refresh_token'], help: 'OAuth2 credentials from Google Cloud Console' },
+    youtube: { icon: '📹', desc: 'Upload videos. Get analytics. Reply to comments.', fields: ['client_id', 'client_secret', 'access_token', 'refresh_token'], help: 'OAuth2 credentials from Google Cloud Console' },
     email: { icon: '📧', desc: 'Send real emails to brands, clients, partners.', fields: ['smtp_server', 'smtp_port', 'username', 'password'], help: 'SMTP server details (e.g. smtp.gmail.com:587)' },
     stripe: { icon: '💳', desc: 'Create real invoices, payment links, track payments.', fields: ['secret_key'], help: 'Stripe secret key (sk_...)' },
-    twitter: { icon: '🐦', desc: 'Post tweets and threads.', fields: ['consumer_key', 'consumer_secret', 'access_token', 'access_token_secret'], help: 'Twitter API v2 credentials' },
+    twitter: { icon: '🕊️', desc: 'Post tweets and threads.', fields: ['consumer_key', 'consumer_secret', 'access_token', 'access_token_secret'], help: 'Twitter API v2 credentials' },
     slack: { icon: '💬', desc: 'Send notifications to Slack channels.', fields: ['webhook_url'], help: 'Slack incoming webhook URL' },
     github: { icon: '🐙', desc: 'Create issues, manage repos.', fields: ['token'], help: 'GitHub personal access token' },
-    telegram: { icon: '✈️', desc: 'Send notifications via Telegram bot.', fields: ['bot_token', 'chat_id'], help: 'Bot token from @BotFather' },
+    telegram: { icon: '\u2708}️', desc: 'Send notifications via Telegram bot.', fields: ['bot_token', 'chat_id'], help: 'Bot token from @BotFather' },
   };
 
   return (
     <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       <div>
-        <h2 style={{ fontSize: '1.3rem' }}>Platform Connections</h2>
-        <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginTop: '4px' }}>
-          Connect real platforms so agents can take real actions — post to Instagram, upload to YouTube, send emails, create Stripe invoices, and more.
-        </div>
+        <div className="eyebrow" style={{ marginBottom: '8px' }}>Real-world connections</div>
+        <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(32px, 4vw, 48px)' }}>Platforms</h1>
+        <p style={{ fontSize: 'var(--fs-body)', color: 'var(--fg-3)', maxWidth: '60ch', marginTop: '8px' }}>
+          Connect real platforms so agents can take real actions — post to Instagram, upload to YouTube, send emails, create Stripe invoices.
+        </p>
       </div>
 
-      {msg && (
-        <div style={{ padding: '10px 14px', background: 'var(--color-surface)', borderRadius: 8, fontSize: '0.85rem', border: '1px solid var(--color-border)' }}>
-          {msg}
-        </div>
-      )}
+      {msg && <div style={{ padding: '10px 14px', background: 'var(--bg-sunken)', borderRadius: 'var(--r-sm)', fontSize: '0.82rem', border: '1px solid var(--border)' }}>{msg}</div>}
 
-      {/* Platform Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px' }}>
         {platforms.map((p) => {
           const info = platformInfo[p.platform] || { icon: '🔌', desc: p.description, fields: [], help: '' };
           return (
-            <div key={p.platform} style={{
-              background: 'var(--color-surface)', border: p.connected ? '1px solid var(--color-accent)' : '1px solid var(--color-border)',
-              borderRadius: 12, padding: '20px',
-            }}>
+            <div key={p.platform} style={{ ...cardStyle, borderColor: p.connected ? 'var(--kit-fox)' : 'var(--border)' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                   <span style={{ fontSize: '1.5rem' }}>{info.icon}</span>
                   <div>
-                    <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>{p.display}</div>
-                    <Badge style={{
-                      background: p.connected ? 'rgba(76,175,80,0.15)' : 'rgba(255,255,255,0.05)',
-                      color: p.connected ? '#4caf50' : 'var(--color-text-muted)',
-                      border: 'none', fontSize: '0.65rem',
-                    }}>{p.connected ? '● CONNECTED' : '○ NOT CONNECTED'}</Badge>
+                    <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>{p.display}</div>
+                    <span className="status-chip" style={{ background: p.connected ? 'rgba(22,163,74,0.1)' : 'rgba(11,13,18,0.04)', color: p.connected ? '#16a34a' : 'var(--fg-mute)', border: 'none', fontSize: '0.6rem' }}>
+                      {p.connected ? '\u25CF connected' : '\u25CB not connected'}
+                    </span>
                   </div>
                 </div>
               </div>
-
-              <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', marginBottom: '14px', lineHeight: 1.5 }}>
-                {info.desc}
-              </div>
-
+              <div style={{ fontSize: '0.76rem', color: 'var(--fg-3)', marginBottom: '14px', lineHeight: 1.5 }}>{info.desc}</div>
               {p.connected ? (
-                <button
-                  onClick={() => handleDisconnect(p.platform)}
-                  style={{ width: '100%', padding: '8px', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: '0.8rem' }}
-                >Disconnect</button>
+                <button onClick={() => handleDisconnect(p.platform)} className="btn-outline" style={{ width: '100%', fontSize: '0.75rem', justifyContent: 'center' }}>Disconnect</button>
               ) : connecting === p.platform ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {info.fields.map((f) => (
-                    <input
-                      key={f}
-                      type={f.includes('password') || f.includes('secret') || f.includes('token') || f.includes('key') ? 'password' : 'text'}
-                      placeholder={f}
-                      value={credForm[`${p.platform}_${f}`] || ''}
-                      onChange={(e) => setCredForm({ ...credForm, [`${p.platform}_${f}`]: e.target.value })}
-                      style={{ width: '100%', padding: '8px 10px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text)', fontSize: '0.8rem' }}
-                    />
+                    <input key={f} type={f.includes('password') || f.includes('secret') || f.includes('token') || f.includes('key') ? 'password' : 'text'} placeholder={f} value={credForm[`${p.platform}_${f}`] || ''} onChange={(e) => setCredForm({ ...credForm, [`${p.platform}_${f}`]: e.target.value })} style={inputStyle} />
                   ))}
-                  <div style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)' }}>{info.help}</div>
+                  <div className="mono" style={{ fontSize: '0.62rem', color: 'var(--fg-mute)' }}>{info.help}</div>
                   <div style={{ display: 'flex', gap: '8px' }}>
-                    <button onClick={() => handleConnect(p.platform, info.fields)} style={{ flex: 1, padding: '8px', background: 'var(--color-accent)', border: 'none', borderRadius: 6, color: '#fff', cursor: 'pointer', fontSize: '0.8rem' }}>Connect</button>
-                    <button onClick={() => { setConnecting(null); setCredForm({}); }} style={{ padding: '8px 12px', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: '0.8rem' }}>Cancel</button>
+                    <button onClick={() => handleConnect(p.platform, info.fields)} className="btn-terminal" style={{ flex: 1, fontSize: '0.75rem', justifyContent: 'center' }}>Connect</button>
+                    <button onClick={() => { setConnecting(null); setCredForm({}); }} className="btn-outline" style={{ fontSize: '0.75rem' }}>Cancel</button>
                   </div>
                 </div>
               ) : (
-                <button
-                  onClick={() => setConnecting(p.platform)}
-                  style={{ width: '100%', padding: '8px', background: 'var(--color-accent)', border: 'none', borderRadius: 6, color: '#fff', cursor: 'pointer', fontSize: '0.8rem' }}
-                >Connect {p.display}</button>
+                <button onClick={() => setConnecting(p.platform)} className="btn-terminal" style={{ width: '100%', fontSize: '0.75rem', justifyContent: 'center' }}>Connect {p.display}</button>
               )}
             </div>
           );
         })}
       </div>
 
-      {/* Recent Platform Actions */}
       {actions.length > 0 && (
         <div>
-          <h3 style={{ fontSize: '0.95rem', fontWeight: 600, marginBottom: '12px' }}>Recent Platform Actions</h3>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <div className="eyebrow" style={{ marginBottom: '12px' }}>Audit trail</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
             {actions.map((a, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', background: 'var(--color-surface)', borderRadius: 8, fontSize: '0.78rem' }}>
-                <span style={{ color: a.status === 'success' ? '#4caf50' : '#f44336' }}>{a.status === 'success' ? '✅' : '❌'}</span>
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 14px', background: 'var(--bg-sunken)', borderRadius: 'var(--r-sm)', fontSize: '0.76rem' }}>
+                <span style={{ color: a.status === 'success' ? '#16a34a' : '#dc2626' }}>{a.status === 'success' ? '\u2705' : '\u274C'}</span>
                 <strong>{a.platform}</strong>
-                <span style={{ color: 'var(--color-text-muted)' }}>{a.action}</span>
-                {a.agent_name && <Badge style={{ background: 'rgba(255,87,34,0.1)', color: 'var(--color-accent)', border: 'none', fontSize: '0.6rem' }}>{a.agent_name}</Badge>}
-                <span style={{ marginLeft: 'auto', color: 'var(--color-text-muted)', fontSize: '0.7rem' }}>{new Date(a.created_at).toLocaleString()}</span>
+                <span style={{ color: 'var(--fg-3)' }}>{a.action}</span>
+                <span className="mono" style={{ marginLeft: 'auto', color: 'var(--fg-mute)', fontSize: '0.62rem' }}>{new Date(a.created_at).toLocaleString()}</span>
               </div>
             ))}
           </div>
@@ -1844,155 +1136,70 @@ function PlatformsTab() {
 // AI PROVIDERS TAB
 // ═══════════════════════════════════════
 
-function ProvidersTab({
-  providers, activeProvider, keyProvider, setKeyProvider,
-  keyValue, setKeyValue, onAddKey, onRemoveKey, keyMsg
-}: any) {
+function ProvidersTab({ providers, activeProvider, keyProvider, setKeyProvider, keyValue, setKeyValue, onAddKey, onRemoveKey, keyMsg }: any) {
   return (
-    <div style={{ maxWidth: 800, margin: '0 auto' }}>
-      <div style={{ marginBottom: 24 }}>
-        <h2 style={{ fontSize: '1.3rem', fontWeight: 700, marginBottom: 8 }}>🤖 AI Provider Configuration</h2>
-        <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', lineHeight: 1.6 }}>
-          CreatorForge uses multiple AI providers with automatic failover. When one provider hits a rate limit or error,
-          the system automatically switches to the next. All providers below are <strong>free</strong> — no credit card required.
-          The <code>llm7-free</code> provider works without any key, so the system always has AI available.
+    <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      <div>
+        <div className="eyebrow" style={{ marginBottom: '8px' }}>LLM providers</div>
+        <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(32px, 4vw, 48px)' }}>AI Providers</h1>
+        <p style={{ fontSize: 'var(--fs-body)', color: 'var(--fg-3)', maxWidth: '60ch', marginTop: '8px' }}>
+          Add API keys to make agents smarter. The system automatically uses the best available provider. LLM7.io free tier is always available as fallback.
         </p>
       </div>
 
-      {/* Add Key Form */}
-      <div style={{
-        background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-        borderRadius: 12, padding: 20, marginBottom: 24,
-      }}>
-        <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: 12 }}>Add Provider API Key (Optional)</h3>
-        <p style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', marginBottom: '12px' }}>
-          The system works out of the box with the free LLM7 provider. Adding a key (e.g. Groq) makes the AI faster and more capable.
-        </p>
-        <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-          <select
-            value={keyProvider}
-            onChange={(e) => setKeyProvider(e.target.value)}
-            style={{
-              padding: '10px 12px', background: 'var(--color-bg)', border: '1px solid var(--color-border)',
-              borderRadius: 8, color: 'var(--color-text)', fontSize: '0.85rem', minWidth: 160,
-            }}
-          >
-            {Object.entries(PROVIDER_INFO).filter(([k]) => k !== 'llm7-free').map(([key, info]) => (
-              <option key={key} value={key}>{info.label}</option>
-            ))}
-          </select>
-          <input
-            type="password"
-            placeholder="Paste your API key here..."
-            value={keyValue}
-            onChange={(e) => setKeyValue(e.target.value)}
-            style={{
-              flex: 1, padding: '10px 12px', background: 'var(--color-bg)', border: '1px solid var(--color-border)',
-              borderRadius: 8, color: 'var(--color-text)', fontSize: '0.85rem',
-            }}
-          />
-          <button
-            onClick={onAddKey}
-            style={{
-              padding: '10px 20px', background: 'var(--color-accent)', color: '#000',
-              border: 'none', borderRadius: 8, fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer',
-            }}
-          >
-            Add Key
-          </button>
+      {/* Active provider */}
+      {activeProvider && (
+        <div style={{ ...cardStyle, display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <span className="status-chip approved"><span className="dot" /> Active</span>
+          <span style={{ fontWeight: 600 }}>{PROVIDER_INFO[activeProvider]?.label || activeProvider}</span>
+          <span style={{ fontSize: '0.8rem', color: 'var(--fg-3)' }}>{PROVIDER_INFO[activeProvider]?.description}</span>
         </div>
-        {keyMsg && (
-          <div style={{ fontSize: '0.82rem', color: keyMsg.startsWith('❌') ? 'var(--color-danger)' : 'var(--color-success)', marginTop: 8 }}>
-            {keyMsg}
-          </div>
-        )}
-        {keyProvider && PROVIDER_INFO[keyProvider] && PROVIDER_INFO[keyProvider].signupUrl && (
-          <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', marginTop: 8 }}>
-            Get a free key: <a href={PROVIDER_INFO[keyProvider].signupUrl} target="_blank" rel="noopener" style={{ color: 'var(--color-accent)' }}>{PROVIDER_INFO[keyProvider].signupUrl}</a>
-            {' '}— {PROVIDER_INFO[keyProvider].description}
+      )}
+
+      {/* Add key form */}
+      <div style={cardStyle}>
+        <div className="eyebrow" style={{ marginBottom: '12px' }}>Add API key</div>
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+          <select value={keyProvider} onChange={(e) => setKeyProvider(e.target.value)} style={{ ...inputStyle, width: 'auto', minWidth: '160px' }}>
+            {Object.entries(PROVIDER_INFO).filter(([k]) => k !== 'llm7-free').map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+          </select>
+          <input type="password" value={keyValue} onChange={(e) => setKeyValue(e.target.value)} placeholder="Paste API key..." style={{ ...inputStyle, flex: 1, minWidth: '200px' }} />
+          <button onClick={onAddKey} className="btn-terminal">Add key</button>
+        </div>
+        {keyMsg && <div style={{ marginTop: '12px', fontSize: '0.82rem', color: 'var(--fg-3)' }}>{keyMsg}</div>}
+        {PROVIDER_INFO[keyProvider]?.signupUrl && (
+          <div style={{ marginTop: '8px' }}>
+            <a href={PROVIDER_INFO[keyProvider].signupUrl} target="_blank" rel="noopener" className="btn-ghost" style={{ fontSize: '0.78rem' }}>
+              Get a free {PROVIDER_INFO[keyProvider].label} key \u2192
+            </a>
           </div>
         )}
       </div>
 
-      {/* Provider List */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {providers.map((p: LLMProvider) => {
-          const info = PROVIDER_INFO[p.name] || { label: p.name, description: '', signupUrl: '', free: false };
-          const isActive = activeProvider === p.name;
-          const hasKey = !p.needs_key || p.total_calls > 0 || !p.last_error.includes('Auth');
-          return (
-            <div key={p.name} style={{
-              background: 'var(--color-surface)', border: `1px solid ${isActive ? 'var(--color-accent)' : 'var(--color-border)'}`,
-              borderRadius: 12, padding: 16, opacity: p.is_rate_limited ? 0.6 : 1,
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>{info.label}</span>
-                  {isActive && (
-                    <Badge style={{ background: 'rgba(255,87,34,0.15)', color: 'var(--color-accent)', border: '1px solid rgba(255,87,34,0.3)', fontSize: '0.68rem' }}>
-                      ● ACTIVE
-                    </Badge>
-                  )}
-                  {p.is_rate_limited && (
-                    <Badge style={{ background: 'rgba(251,191,36,0.15)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.3)', fontSize: '0.68rem' }}>
-                      ⏳ RATE LIMITED ({p.rate_limit_expires_in}s)
-                    </Badge>
-                  )}
-                  {!p.needs_key && (
-                    <Badge style={{ background: 'rgba(74,222,128,0.15)', color: 'var(--color-success)', border: '1px solid rgba(74,222,128,0.3)', fontSize: '0.68rem' }}>
-                      NO KEY NEEDED
-                    </Badge>
-                  )}
-                </div>
-                {p.needs_key && hasKey && (
-                  <button
-                    onClick={() => onRemoveKey(p.name)}
-                    style={{
-                      padding: '4px 10px', background: 'transparent', border: '1px solid var(--color-border)',
-                      borderRadius: 6, color: 'var(--color-text-muted)', fontSize: '0.72rem', cursor: 'pointer',
-                    }}
-                  >
-                    Remove Key
-                  </button>
-                )}
-              </div>
-              <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', marginBottom: 8 }}>
-                {info.description}
-              </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
-                {p.models.map((m: string) => (
-                  <code key={m} style={{ fontSize: '0.7rem', padding: '2px 6px', background: 'var(--color-bg)', borderRadius: 4, color: 'var(--color-text-muted)' }}>
-                    {m}
-                  </code>
-                ))}
-              </div>
-              <div style={{ display: 'flex', gap: 16, fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
-                <span>📊 {p.total_calls} calls</span>
-                {p.total_errors > 0 && <span style={{ color: 'var(--color-danger)' }}>⚠️ {p.total_errors} errors</span>}
-                {info.signupUrl && (
-                  <a href={info.signupUrl} target="_blank" rel="noopener" style={{ color: 'var(--color-accent)' }}>
-                    Get free key →
-                  </a>
-                )}
-              </div>
+      {/* Provider list */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '12px' }}>
+        {providers.map((p: LLMProvider) => (
+          <div key={p.name} style={{ ...cardStyle, borderColor: p.enabled ? 'var(--kit-fox)' : 'var(--border)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+              <strong style={{ fontSize: '0.9rem' }}>{PROVIDER_INFO[p.name]?.label || p.name}</strong>
+              {p.enabled ? (
+                <span className="status-chip approved"><span className="dot" /> Enabled</span>
+              ) : p.is_rate_limited ? (
+                <span className="status-chip execute"><span className="dot" /> Rate limited</span>
+              ) : (
+                <span className="eyebrow" style={{ color: 'var(--fg-mute)' }}>No key</span>
+              )}
             </div>
-          );
-        })}
-      </div>
-
-      {/* Info Box */}
-      <div style={{
-        marginTop: 24, padding: 16, background: 'rgba(255,87,34,0.05)',
-        border: '1px solid rgba(255,87,34,0.2)', borderRadius: 12,
-      }}>
-        <h4 style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: 8 }}>💡 How Multi-Provider Failover Works</h4>
-        <ul style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', lineHeight: 1.8, paddingLeft: 20, margin: 0 }}>
-          <li>When you add a key (e.g., Groq), it becomes the <strong>first choice</strong> — faster and more powerful</li>
-          <li>If that provider hits a rate limit (429), the system waits 60s and tries the <strong>next provider</strong></li>
-          <li><code>llm7-free</code> is always last in the chain — no key needed, always available</li>
-          <li>If all LLM providers fail, agents fall back to <strong>rule-based reasoning</strong> (never breaks)</li>
-          <li>Add multiple keys for maximum reliability — the system handles everything automatically</li>
-        </ul>
+            <div style={{ fontSize: '0.76rem', color: 'var(--fg-3)', marginBottom: '8px' }}>{PROVIDER_INFO[p.name]?.description}</div>
+            <div style={{ display: 'flex', gap: '12px', fontSize: '0.7rem', color: 'var(--fg-mute)' }}>
+              <span>{p.total_calls} calls</span>
+              {p.total_errors > 0 && <span style={{ color: '#dc2626' }}>{p.total_errors} errors</span>}
+            </div>
+            {p.enabled && p.name !== 'llm7-free' && (
+              <button onClick={() => onRemoveKey(p.name)} className="btn-outline" style={{ marginTop: '10px', width: '100%', fontSize: '0.7rem', justifyContent: 'center' }}>Remove key</button>
+            )}
+          </div>
+        ))}
       </div>
     </div>
   );
