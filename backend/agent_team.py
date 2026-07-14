@@ -297,37 +297,139 @@ async def process_pending_deal(creator_id: int, deal_id: int) -> dict:
 async def process_approved_deal(creator_id: int, deal_id: int) -> dict:
     """
     When a deal is approved, trigger the full pipeline:
-    1. Finance Agent creates invoice
-    2. Email Agent sends invoice to brand
-    3. Scheduler Agent schedules content
-    4. Notification Agent notifies the creator
+    1. Finance Agent creates invoice (real Stripe if connected)
+    2. Content Agent drafts content for the deal
+    3. Email Agent sends invoice to brand (if email connected)
+    4. Scheduler Agent schedules content
+    5. Notification Agent notifies the creator
     """
     results = {}
-    
+
+    # Get deal info
+    with db_cursor() as conn:
+        deal = conn.execute("SELECT * FROM deals WHERE id = ?", (deal_id,)).fetchone()
+        deal = dict(deal) if deal else {}
+    brand_name = deal.get("brand_name", "the brand")
+    deal_desc = deal.get("description", "")
+
+    _log_activity("orchestrator", "pipeline_started",
+                  f"🚀 Autonomous pipeline started for approved deal: {brand_name}",
+                  "deal", deal_id, status="started")
+
     # 1. Finance Agent creates invoice
-    finance_result = await run_agent_by_name(
-        "finance_agent",
-        f"Create invoice for approved deal #{deal_id}. Check db_lookup for deal details. If Stripe is connected, create a real Stripe invoice.",
-        creator_id, entity_type="deal", entity_id=deal_id
-    )
-    results["finance"] = finance_result
-    
-    # 2. Scheduler Agent schedules content
-    scheduler_result = await run_agent_by_name(
-        "scheduler_agent",
-        f"Schedule content deliverables for approved deal #{deal_id}. Create calendar events for content deadlines.",
-        creator_id, entity_type="deal", entity_id=deal_id
-    )
-    results["scheduler"] = scheduler_result
-    
-    # 3. Notification Agent notifies
-    notif_result = await run_agent_by_name(
-        "notification_agent",
-        f"Notify: Deal #{deal_id} has been approved. Invoice created and content scheduled. Check connected platforms and send notification.",
-        creator_id
-    )
-    results["notification"] = notif_result
-    
+    try:
+        finance_result = await run_agent_by_name(
+            "finance_agent",
+            f"Create invoice for approved deal #{deal_id} with {brand_name}. "
+            f"Amount: ${deal.get('negotiated_amount') or deal.get('offer_amount', 0)}. "
+            f"Check db_lookup for deal details. If Stripe is connected, create a real Stripe invoice. "
+            f"If email is connected, send the invoice to the brand.",
+            creator_id, entity_type="deal", entity_id=deal_id
+        )
+        results["finance"] = finance_result
+        _log_activity("orchestrator", "pipeline_finance_done",
+                      f"💰 Finance Agent completed invoice for {brand_name}",
+                      "deal", deal_id, status="completed")
+    except Exception as e:
+        _log_activity("orchestrator", "pipeline_finance_error",
+                      f"⚠️ Finance Agent error: {str(e)[:80]}",
+                      "deal", deal_id, status="failed")
+        results["finance"] = {"error": str(e)}
+
+    # 2. Content Agent drafts content for the deal
+    try:
+        # Find the auto-created content brief for this deal
+        with db_cursor() as conn:
+            content = conn.execute(
+                "SELECT id FROM content_items WHERE deal_id = ? AND status = 'brief' ORDER BY id DESC LIMIT 1",
+                (deal_id,)
+            ).fetchone()
+
+        if content:
+            content_id = content["id"]
+            content_result = await run_agent_by_name(
+                "content_agent",
+                f"Draft content for approved deal with {brand_name}. "
+                f"Content brief ID: {content_id}. "
+                f"Deal description: {deal_desc}. "
+                f"Research trending topics and write a full content draft optimized for the platform. "
+                f"Use db_lookup to get the content item details, then write the draft.",
+                creator_id, entity_type="content", entity_id=content_id
+            )
+            results["content"] = content_result
+            _log_activity("orchestrator", "pipeline_content_done",
+                          f"✍️ Content Agent drafted content for {brand_name}",
+                          "deal", deal_id, status="completed")
+        else:
+            # No content brief yet — create one and draft it
+            with db_cursor() as conn:
+                cur = conn.execute("""
+                    INSERT INTO content_items (creator_id, title, content_type, brief, platform, status, deal_id)
+                    VALUES (?, ?, 'post', ?, 'instagram', 'brief', ?)
+                """, (creator_id, f"Sponsored content for {brand_name}",
+                      f"Create sponsored content for {brand_name} — {deal_desc}",
+                      deal_id))
+                content_id = cur.lastrowid
+
+            content_result = await run_agent_by_name(
+                "content_agent",
+                f"Draft content for approved deal with {brand_name}. "
+                f"Content brief ID: {content_id}. "
+                f"Deal description: {deal_desc}. "
+                f"Research trending topics and write a full content draft optimized for the platform.",
+                creator_id, entity_type="content", entity_id=content_id
+            )
+            results["content"] = content_result
+            _log_activity("orchestrator", "pipeline_content_done",
+                          f"✍️ Content Agent drafted content for {brand_name}",
+                          "deal", deal_id, status="completed")
+    except Exception as e:
+        _log_activity("orchestrator", "pipeline_content_error",
+                      f"⚠️ Content Agent error: {str(e)[:80]}",
+                      "deal", deal_id, status="failed")
+        results["content"] = {"error": str(e)}
+
+    # 3. Scheduler Agent schedules content
+    try:
+        scheduler_result = await run_agent_by_name(
+            "scheduler_agent",
+            f"Schedule content deliverables for approved deal #{deal_id} with {brand_name}. "
+            f"Create calendar events for content deadlines.",
+            creator_id, entity_type="deal", entity_id=deal_id
+        )
+        results["scheduler"] = scheduler_result
+        _log_activity("orchestrator", "pipeline_scheduler_done",
+                      f"📅 Scheduler Agent scheduled content for {brand_name}",
+                      "deal", deal_id, status="completed")
+    except Exception as e:
+        _log_activity("orchestrator", "pipeline_scheduler_error",
+                      f"⚠️ Scheduler Agent error: {str(e)[:80]}",
+                      "deal", deal_id, status="failed")
+        results["scheduler"] = {"error": str(e)}
+
+    # 4. Notification Agent notifies
+    try:
+        notif_result = await run_agent_by_name(
+            "notification_agent",
+            f"Notify: Deal #{deal_id} with {brand_name} has been approved and fully processed. "
+            f"Invoice created, content drafted, schedule set. "
+            f"Send notification via connected platforms (Slack, Telegram, etc.).",
+            creator_id
+        )
+        results["notification"] = notif_result
+        _log_activity("orchestrator", "pipeline_notification_done",
+                      f"🔔 Notification Agent sent alerts for {brand_name}",
+                      "deal", deal_id, status="completed")
+    except Exception as e:
+        _log_activity("orchestrator", "pipeline_notification_error",
+                      f"⚠️ Notification Agent error: {str(e)[:80]}",
+                      "deal", deal_id, status="failed")
+        results["notification"] = {"error": str(e)}
+
+    _log_activity("orchestrator", "pipeline_complete",
+                  f"✅ Autonomous pipeline complete for {brand_name} — all agents finished",
+                  "deal", deal_id, status="completed")
+
     return {"pipeline": "deal_approved", "results": results}
 
 

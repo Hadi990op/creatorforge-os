@@ -98,6 +98,7 @@ def init_db():
         agent_reasoning TEXT,
         needs_approval INTEGER DEFAULT 1,
         scheduled_for TEXT,
+        deal_id INTEGER REFERENCES deals(id),
         created_at TEXT DEFAULT (datetime('now')),
         updated_at TEXT DEFAULT (datetime('now')),
         published_at TEXT

@@ -38,6 +38,7 @@ const PROVIDER_INFO: Record<string, { label: string; signupUrl: string; descript
   openrouter: { label: 'OpenRouter', signupUrl: 'https://openrouter.ai/keys', description: '28+ free models, great fallback', free: true },
   cerebras: { label: 'Cerebras', signupUrl: 'https://cloud.cerebras.ai/', description: 'Ultra-fast inference, 30 RPM free', free: true },
   mistral: { label: 'Mistral AI', signupUrl: 'https://console.mistral.ai/', description: 'Mistral models, free tier', free: true },
+  llm7: { label: 'LLM7.io', signupUrl: 'https://llm7.io', description: 'Free tier (no key) or custom API key for higher limits', free: true },
   'llm7-free': { label: 'LLM7 (Free)', signupUrl: '', description: 'No key needed — always available', free: true },
 };
 
@@ -701,23 +702,26 @@ function ContentTab({ onReload }: { onReload: () => void }) {
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
         {items.map((item: any) => (
-          <div key={item.id} className="rsp-content-row" style={{ ...cardStyle, display: 'flex', gap: '16px', alignItems: 'start' }}>
+          <div key={item.id} className="rsp-content-row" style={{ ...cardStyle, display: 'flex', gap: '16px', alignItems: 'start', borderLeft: item.deal_id ? '3px solid var(--kit-fox)' : '1px solid var(--border)' }}>
             <div style={{ fontSize: '1.5rem' }}>{platformIcons[item.platform] || '📄'}</div>
             <div style={{ flex: 1 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
                 <strong style={{ fontSize: '0.9rem' }}>{item.title}</strong>
-                <span className="status-chip" style={{ background: 'var(--bg-sunken)', color: 'var(--fg-3)', border: 'none' }}>{item.platform} \u00b7 {item.content_type}</span>
+                <span className="status-chip" style={{ background: 'var(--bg-sunken)', color: 'var(--fg-3)', border: 'none' }}>{item.platform} · {item.content_type}</span>
+                {item.deal_id && <span className="status-chip" style={{ background: 'rgba(238,77,31,0.1)', color: 'var(--kit-fox)', border: 'none' }}>From deal #{item.deal_id}</span>}
+                {item.status && <span className="status-chip" style={{ background: 'var(--bg-sunken)', color: item.status === 'published' ? '#16a34a' : item.status === 'draft_ready' ? '#f59e0b' : 'var(--fg-3)', border: 'none' }}>{item.status.replace(/_/g, ' ')}</span>}
               </div>
               {item.brief && <div style={{ fontSize: '0.8rem', color: 'var(--fg-3)', marginBottom: '8px' }}>{item.brief}</div>}
-              {item.draft_content && (
+              {item.draft && (
                 <div style={{ padding: '12px', background: 'var(--bg-sunken)', borderRadius: 'var(--r-sm)', fontSize: '0.78rem', lineHeight: 1.6, color: 'var(--fg-2)', whiteSpace: 'pre-wrap', maxHeight: '200px', overflow: 'auto' }}>
-                  {item.draft_content}
+                  {item.draft}
                 </div>
               )}
             </div>
             <div className="rsp-content-actions" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              {!item.draft_content && <button onClick={() => handleGenerate(item.id)} className="btn-terminal" style={{ fontSize: '10px', padding: '6px 12px' }}>Generate</button>}
-              <button onClick={async () => { await fetchAPI(`/content/${item.id}/publish`, { method: 'POST' }); loadItems(); }} className="btn-outline" style={{ fontSize: '10px', padding: '6px 12px' }}>Publish</button>
+              {!item.draft && <button onClick={() => handleGenerate(item.id)} className="btn-terminal" style={{ fontSize: '10px', padding: '6px 12px' }}>Generate</button>}
+              {item.draft && item.status !== 'published' && <button onClick={() => handleGenerate(item.id)} className="btn-outline" style={{ fontSize: '10px', padding: '6px 12px' }}>Regenerate</button>}
+              {item.draft && <button onClick={async () => { await fetchAPI(`/content/${item.id}/publish`, { method: 'POST' }); loadItems(); }} className="btn-outline" style={{ fontSize: '10px', padding: '6px 12px' }}>Publish</button>}
             </div>
           </div>
         ))}

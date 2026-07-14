@@ -115,11 +115,12 @@ def _load_providers() -> list:
             models=["mistral-medium-3-5-128b", "open-mixtral-8x7b"],
         ))
 
-    # ── 2. LLM7.io free tier (no key needed) — always available ──
+    # ── 2. LLM7.io (free tier or custom API key) — always available ──
+    llm7_key = user_keys.get("LLM7_API_KEY", os.environ.get("LLM7_API_KEY", ""))
     providers.append(LLMProvider(
-        name="llm7-free",
+        name="llm7-free" if not llm7_key else "llm7",
         base_url="https://api.llm7.io/v1",
-        api_key="free",
+        api_key=llm7_key or "free",
         models=["gemma3:27b", "codestral-latest"],
         needs_key=False,
     ))
@@ -194,6 +195,7 @@ def add_provider_key(provider_name: str, api_key: str) -> dict:
         "openrouter": "OPENROUTER_API_KEY",
         "cerebras": "CEREBRAS_API_KEY",
         "mistral": "MISTRAL_API_KEY",
+        "llm7": "LLM7_API_KEY",
     }
     env_key = key_map.get(provider_name.lower())
     if not env_key:
@@ -221,6 +223,7 @@ def remove_provider_key(provider_name: str) -> dict:
         "openrouter": "OPENROUTER_API_KEY",
         "cerebras": "CEREBRAS_API_KEY",
         "mistral": "MISTRAL_API_KEY",
+        "llm7": "LLM7_API_KEY",
     }
     env_key = key_map.get(provider_name.lower())
     if not env_key:

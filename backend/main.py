@@ -5,6 +5,7 @@ The Agentic Operating System for Creators
 import os
 import sys
 import json
+import asyncio
 from pathlib import Path
 from datetime import datetime
 
@@ -227,6 +228,106 @@ async def analyze_deal(deal_id: int):
     result = await deal_agent_analyze(creator["id"], deal_id)
     return result
 
+
+@app.post("/api/deals/{deal_id}/approve")
+async def approve_deal(deal_id: int):
+    """Approve a deal directly (from Deals tab) and trigger the full autonomous pipeline."""
+    deal = None
+    approval_id = None
+
+    with db_cursor() as conn:
+        deal_row = conn.execute("SELECT * FROM deals WHERE id = ?", (deal_id,)).fetchone()
+        if not deal_row:
+            raise HTTPException(404, "Deal not found")
+        deal = dict(deal_row)
+
+        # Check if there's a pending approval for this deal
+        approval = conn.execute(
+            "SELECT id FROM approval_queue WHERE entity_type = 'deal' AND entity_id = ? AND status = 'pending'",
+            (deal_id,)
+        ).fetchone()
+
+        if approval:
+            approval_id = approval["id"]
+        else:
+            # No approval in queue — approve directly and create invoice + content
+            conn.execute("UPDATE deals SET status = 'approved', updated_at = datetime('now') WHERE id = ?", (deal_id,))
+            conn.execute("""
+                INSERT INTO invoices (creator_id, deal_id, client_name, amount, status, agent_notes)
+                VALUES (?, ?, ?, ?, 'draft', 'Auto-generated upon deal approval')
+            """, (deal["creator_id"], deal_id, deal["brand_name"],
+                  deal.get("negotiated_amount") or deal.get("offer_amount", 0)))
+            conn.execute("""
+                INSERT INTO content_items (creator_id, title, content_type, brief, platform, status, deal_id)
+                VALUES (?, ?, 'post', ?, 'instagram', 'brief', ?)
+            """, (deal["creator_id"], f"Sponsored content for {deal['brand_name']}",
+                  f"Create sponsored content for {deal['brand_name']} — {deal.get('description', '')}",
+                  deal_id))
+
+    # Log activities (outside the DB context to avoid lock)
+    brand_name = deal["brand_name"]
+    _log_activity_act("deal_agent", "deal_approved",
+                  f"✅ Deal with {brand_name} approved — triggering autonomous pipeline",
+                  "deal", deal_id, status="completed")
+    _log_activity_act("finance_agent", "auto_invoice_created",
+                  f"💰 Auto-generated invoice for {brand_name}",
+                  "deal", deal_id, status="completed")
+    _log_activity_act("content_agent", "auto_content_scheduled",
+                  f"✍️ Auto-created content brief for {brand_name} — ready in Content tab",
+                  "deal", deal_id, status="completed")
+
+    # If there was an approval, resolve it (this triggers the pipeline)
+    if approval_id:
+        from agents_v2 import resolve_approval
+        result = await resolve_approval(approval_id, "approved")
+    else:
+        # Trigger the autonomous pipeline directly
+        result = {"status": "approved", "deal_id": deal_id}
+        try:
+            from agent_team import process_approved_deal
+            creator_id = deal.get("creator_id", 1)
+            asyncio.create_task(process_approved_deal(creator_id, deal_id))
+        except Exception as e:
+            _log_activity_act("orchestrator", "pipeline_error",
+                          f"⚠️ Pipeline trigger error: {str(e)[:100]}",
+                          "deal", deal_id, status="failed")
+
+    return {"status": "approved", "deal_id": deal_id, "message": "Deal approved. Autonomous pipeline triggered — finance, content, and notifications are being processed."}
+
+
+@app.post("/api/deals/{deal_id}/decline")
+async def decline_deal(deal_id: int):
+    """Decline a deal directly (from Deals tab)."""
+    with db_cursor() as conn:
+        deal = conn.execute("SELECT * FROM deals WHERE id = ?", (deal_id,)).fetchone()
+        if not deal:
+            raise HTTPException(404, "Deal not found")
+        deal = dict(deal)
+        conn.execute("UPDATE deals SET status = 'declined', updated_at = datetime('now') WHERE id = ?", (deal_id,))
+        # Also resolve any pending approval
+        approval = conn.execute(
+            "SELECT id FROM approval_queue WHERE entity_type = 'deal' AND entity_id = ? AND status = 'pending'",
+            (deal_id,)
+        ).fetchone()
+        if approval:
+            conn.execute("UPDATE approval_queue SET status = 'declined', resolved_at = datetime('now') WHERE id = ?", (approval["id"],))
+
+    _log_activity_act("deal_agent", "deal_declined",
+                      f"❌ Deal with {deal['brand_name']} declined",
+                      "deal", deal_id, status="completed")
+    return {"status": "declined", "deal_id": deal_id}
+
+
+def _log_activity_act(agent_name: str, action: str, summary: str,
+                      entity_type: str = None, entity_id: int = None, status: str = "completed"):
+    """Local activity logger to avoid circular imports."""
+    from models import db_cursor
+    with db_cursor() as conn:
+        conn.execute("""
+            INSERT INTO agent_activities (agent_name, action, summary, entity_type, entity_id, status, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+        """, (agent_name, action, summary, entity_type, entity_id, status))
+
 @app.delete("/api/deals/{deal_id}")
 async def delete_deal(deal_id: int):
     with db_cursor() as conn:
@@ -268,6 +369,52 @@ async def draft_content(content_id: int):
         raise HTTPException(404, "No creator")
     result = await content_agent_draft(creator["id"], content_id)
     return result
+
+# Alias: frontend calls "generate" — same as "draft"
+@app.post("/api/agents/content/generate/{content_id}")
+async def generate_content(content_id: int):
+    return await draft_content(content_id)
+
+
+@app.post("/api/content/{content_id}/publish")
+async def publish_content(content_id: int):
+    """Publish content to connected platforms via the Publisher Agent."""
+    with db_cursor() as conn:
+        content = conn.execute("SELECT * FROM content_items WHERE id = ?", (content_id,)).fetchone()
+        if not content:
+            raise HTTPException(404, "Content not found")
+        content = dict(content)
+        creator_id = content["creator_id"]
+
+    # Update status to publishing
+    with db_cursor() as conn:
+        conn.execute("UPDATE content_items SET status = 'publishing', updated_at = datetime('now') WHERE id = ?", (content_id,))
+
+    # Trigger the publisher agent to actually post to connected platforms
+    try:
+        from agent_team import run_agent_by_name
+        platform = content.get("platform", "instagram")
+        draft = content.get("draft", content.get("brief", ""))
+        title = content.get("title", "Content")
+
+        # Run publisher agent
+        result = await run_agent_by_name(
+            "publisher_agent",
+            f"Publish the following content to {platform}. Title: {title}. Content: {draft[:500]}. "
+            f"Use the appropriate platform tool to post this. If the platform is not connected, report that.",
+            creator_id, entity_type="content", entity_id=content_id
+        )
+
+        # Update status based on result
+        summary = result.get("summary", "Published")
+        with db_cursor() as conn:
+            conn.execute("UPDATE content_items SET status = 'published', updated_at = datetime('now') WHERE id = ?", (content_id,))
+
+        return {"status": "published", "content_id": content_id, "agent_result": summary}
+    except Exception as e:
+        with db_cursor() as conn:
+            conn.execute("UPDATE content_items SET status = 'draft_ready', updated_at = datetime('now') WHERE id = ?", (content_id,))
+        return {"status": "error", "error": str(e)}
 
 @app.delete("/api/content/{content_id}")
 async def delete_content(content_id: int):
