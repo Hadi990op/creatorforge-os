@@ -1,0 +1,560 @@
+"""
+CreatorForge OS — FastAPI Main Application
+The Agentic Operating System for Creators
+"""
+import os
+import sys
+import json
+from pathlib import Path
+from datetime import datetime
+
+# Ensure backend dir is in path
+sys.path.insert(0, str(Path(__file__).parent))
+
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from typing import Optional, List
+
+from models import init_db, db_cursor
+from seed import seed
+from agents import (
+    deal_agent_analyze, content_agent_draft,
+    finance_agent_invoice, memory_agent_learn,
+    resolve_approval,
+)
+from llm import HAS_LLM
+from llm_engine import (
+    get_provider_status, add_provider_key, remove_provider_key,
+    reload_providers, get_active_provider,
+)
+
+app = FastAPI(title="CreatorForge OS", version="1.0.0",
+              description="The Agentic Operating System for Creators")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+@app.on_event("startup")
+async def startup():
+    init_db()
+    # Don't auto-seed — user onboards through the UI
+    # But seed demo data only if no creator exists AND seed.py is explicitly called
+    with db_cursor() as conn:
+        count = conn.execute("SELECT COUNT(*) FROM creators").fetchone()[0]
+    if count == 0:
+        print("[CreatorForge] No creator found — waiting for onboarding via UI")
+
+
+# ─── Dashboard ───
+
+@app.get("/api/dashboard")
+async def dashboard():
+    """Main dashboard data — overview of everything."""
+    with db_cursor() as conn:
+        creator = conn.execute("SELECT * FROM creators LIMIT 1").fetchone()
+        if not creator:
+            return {"needs_onboarding": True}
+        creator = dict(creator)
+
+        products = [dict(r) for r in conn.execute("SELECT * FROM products WHERE creator_id = ?", (creator["id"],)).fetchall()]
+        deals_active = [dict(r) for r in conn.execute(
+            "SELECT * FROM deals WHERE creator_id = ? AND status IN ('pending_analysis', 'analyzed', 'negotiating')",
+            (creator["id"],)
+        ).fetchall()]
+        deals_closed = [dict(r) for r in conn.execute(
+            "SELECT * FROM deals WHERE creator_id = ? AND status IN ('approved', 'declined', 'closed')",
+            (creator["id"],)
+        ).fetchall()]
+        content_items = [dict(r) for r in conn.execute(
+            "SELECT * FROM content_items WHERE creator_id = ?", (creator["id"],)
+        ).fetchall()]
+        invoices = [dict(r) for r in conn.execute(
+            "SELECT * FROM invoices WHERE creator_id = ?", (creator["id"],)
+        ).fetchall()]
+        pending_invoices = [dict(r) for r in conn.execute(
+            "SELECT * FROM invoices WHERE creator_id = ? AND status IN ('draft', 'pending_approval')",
+            (creator["id"],)
+        ).fetchall()]
+        activities = [dict(r) for r in conn.execute(
+            "SELECT * FROM agent_activities ORDER BY created_at DESC LIMIT 20"
+        ).fetchall()]
+        pending_approvals = [dict(r) for r in conn.execute(
+            "SELECT * FROM approval_queue WHERE status = 'pending' ORDER BY created_at DESC"
+        ).fetchall()]
+        patterns = [dict(r) for r in conn.execute(
+            "SELECT * FROM memory_patterns WHERE creator_id = ?", (creator["id"],)
+        ).fetchall()]
+        recent_thinking = [dict(r) for r in conn.execute(
+            """SELECT t.*, a.summary as activity_summary
+               FROM agent_thinking t
+               LEFT JOIN agent_activities a ON t.activity_id = a.id
+               ORDER BY t.created_at DESC LIMIT 30"""
+        ).fetchall()]
+
+        total_sales = sum(p["sales_count"] for p in products)
+        total_revenue_from_sales = sum(p["price"] * p["sales_count"] for p in products)
+        total_deal_revenue = sum(
+            (d.get("negotiated_amount") or d.get("offer_amount") or 0)
+            for d in deals_closed if d["status"] == "approved"
+        )
+
+    return {
+        "creator": creator,
+        "stats": {
+            "followers": creator["followers"],
+            "monthly_revenue": creator["monthly_revenue"],
+            "cleared_revenue": creator["cleared_revenue"],
+            "products_count": len(products),
+            "total_sales": total_sales,
+            "total_product_revenue": total_revenue_from_sales,
+            "total_deal_revenue": total_deal_revenue,
+            "active_deals": len(deals_active),
+            "closed_deals": len(deals_closed),
+            "content_count": len(content_items),
+            "published_content": len([c for c in content_items if c["status"] == "published"]),
+            "pending_approvals": len(pending_approvals),
+            "patterns_count": len(patterns),
+            "llm_enabled": True,
+            "active_provider": get_active_provider(),
+            "providers": get_provider_status(),
+        },
+        "products": products,
+        "active_deals": deals_active,
+        "pending_approvals": pending_approvals,
+        "recent_activities": activities,
+        "patterns": patterns,
+        "recent_thinking": recent_thinking,
+    }
+
+
+# ─── Creator ───
+
+@app.get("/api/creator")
+async def get_creator():
+    with db_cursor() as conn:
+        creator = conn.execute("SELECT * FROM creators LIMIT 1").fetchone()
+        if not creator:
+            raise HTTPException(404, "No creator found")
+        return dict(creator)
+
+@app.put("/api/creator")
+async def update_creator(data: dict):
+    with db_cursor() as conn:
+        creator = conn.execute("SELECT * FROM creators LIMIT 1").fetchone()
+        if not creator:
+            raise HTTPException(404, "No creator found")
+        cid = creator["id"]
+        for field in ["name", "handle", "bio", "niche", "followers", "monthly_revenue", "cleared_revenue", "avatar"]:
+            if field in data:
+                conn.execute(f"UPDATE creators SET {field} = ? WHERE id = ?", (data[field], cid))
+        return {"status": "updated"}
+
+
+# ─── Products / Storefront ───
+
+@app.get("/api/products")
+async def get_products():
+    with db_cursor() as conn:
+        rows = conn.execute("SELECT * FROM products ORDER BY sales_count DESC").fetchall()
+        return [dict(r) for r in rows]
+
+@app.post("/api/products")
+async def add_product(data: dict):
+    with db_cursor() as conn:
+        creator = conn.execute("SELECT id FROM creators LIMIT 1").fetchone()
+        if not creator:
+            raise HTTPException(404, "No creator")
+        cur = conn.execute("""
+            INSERT INTO products (creator_id, title, description, price, sales_count, category, image_emoji)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (creator["id"], data.get("title", ""), data.get("description", ""),
+              data.get("price", 0), data.get("sales_count", 0),
+              data.get("category", ""), data.get("image_emoji", "📦")))
+        return {"id": cur.lastrowid, "status": "created"}
+
+@app.delete("/api/products/{product_id}")
+async def delete_product(product_id: int):
+    with db_cursor() as conn:
+        conn.execute("DELETE FROM products WHERE id = ?", (product_id,))
+        return {"status": "deleted"}
+
+
+# ─── Deals ───
+
+@app.get("/api/deals")
+async def get_deals(status: Optional[str] = None):
+    with db_cursor() as conn:
+        if status:
+            rows = conn.execute("SELECT * FROM deals WHERE status = ? ORDER BY created_at DESC", (status,)).fetchall()
+        else:
+            rows = conn.execute("SELECT * FROM deals ORDER BY created_at DESC").fetchall()
+        return [dict(r) for r in rows]
+
+@app.post("/api/deals")
+async def add_deal(data: dict):
+    with db_cursor() as conn:
+        creator = conn.execute("SELECT id FROM creators LIMIT 1").fetchone()
+        if not creator:
+            raise HTTPException(404, "No creator")
+        cur = conn.execute("""
+            INSERT INTO deals (creator_id, brand_name, brand_type, deal_type, offer_amount, description, status, needs_approval)
+            VALUES (?, ?, ?, ?, ?, ?, 'pending_analysis', 0)
+        """, (creator["id"], data.get("brand_name", ""), data.get("brand_type", ""),
+              data.get("deal_type", "sponsorship"), data.get("offer_amount", 0),
+              data.get("description", "")))
+        deal_id = cur.lastrowid
+    return {"id": deal_id, "status": "created", "message": "Deal added. Run /api/agents/deal/analyze to process."}
+
+@app.post("/api/agents/deal/analyze/{deal_id}")
+async def analyze_deal(deal_id: int):
+    creator = None
+    with db_cursor() as conn:
+        creator = conn.execute("SELECT id FROM creators LIMIT 1").fetchone()
+    if not creator:
+        raise HTTPException(404, "No creator")
+    result = await deal_agent_analyze(creator["id"], deal_id)
+    return result
+
+@app.delete("/api/deals/{deal_id}")
+async def delete_deal(deal_id: int):
+    with db_cursor() as conn:
+        conn.execute("DELETE FROM deals WHERE id = ?", (deal_id,))
+        conn.execute("DELETE FROM approval_queue WHERE entity_type = 'deal' AND entity_id = ?", (deal_id,))
+        return {"status": "deleted"}
+
+
+# ─── Content ───
+
+@app.get("/api/content")
+async def get_content(status: Optional[str] = None):
+    with db_cursor() as conn:
+        if status:
+            rows = conn.execute("SELECT * FROM content_items WHERE status = ? ORDER BY created_at DESC", (status,)).fetchall()
+        else:
+            rows = conn.execute("SELECT * FROM content_items ORDER BY created_at DESC").fetchall()
+        return [dict(r) for r in rows]
+
+@app.post("/api/content")
+async def add_content(data: dict):
+    with db_cursor() as conn:
+        creator = conn.execute("SELECT id FROM creators LIMIT 1").fetchone()
+        if not creator:
+            raise HTTPException(404, "No creator")
+        cur = conn.execute("""
+            INSERT INTO content_items (creator_id, title, content_type, brief, status, platform)
+            VALUES (?, ?, ?, ?, 'brief', ?)
+        """, (creator["id"], data.get("title", ""), data.get("content_type", "post"),
+              data.get("brief", ""), data.get("platform", "instagram")))
+        return {"id": cur.lastrowid, "status": "created"}
+
+@app.post("/api/agents/content/draft/{content_id}")
+async def draft_content(content_id: int):
+    creator = None
+    with db_cursor() as conn:
+        creator = conn.execute("SELECT id FROM creators LIMIT 1").fetchone()
+    if not creator:
+        raise HTTPException(404, "No creator")
+    result = await content_agent_draft(creator["id"], content_id)
+    return result
+
+@app.delete("/api/content/{content_id}")
+async def delete_content(content_id: int):
+    with db_cursor() as conn:
+        conn.execute("DELETE FROM content_items WHERE id = ?", (content_id,))
+        conn.execute("DELETE FROM approval_queue WHERE entity_type = 'content' AND entity_id = ?", (content_id,))
+        return {"status": "deleted"}
+
+
+# ─── Invoices / Finance ───
+
+@app.get("/api/invoices")
+async def get_invoices(status: Optional[str] = None):
+    with db_cursor() as conn:
+        if status:
+            rows = conn.execute("SELECT * FROM invoices WHERE status = ? ORDER BY created_at DESC", (status,)).fetchall()
+        else:
+            rows = conn.execute("SELECT * FROM invoices ORDER BY created_at DESC").fetchall()
+        return [dict(r) for r in rows]
+
+@app.post("/api/invoices")
+async def add_invoice(data: dict):
+    with db_cursor() as conn:
+        creator = conn.execute("SELECT id FROM creators LIMIT 1").fetchone()
+        if not creator:
+            raise HTTPException(404, "No creator")
+        cur = conn.execute("""
+            INSERT INTO invoices (creator_id, deal_id, client_name, amount, status)
+            VALUES (?, ?, ?, ?, 'draft')
+        """, (creator["id"], data.get("deal_id"), data.get("client_name", ""),
+              data.get("amount", 0)))
+        return {"id": cur.lastrowid, "status": "created"}
+
+@app.post("/api/agents/finance/invoice/{invoice_id}")
+async def generate_invoice(invoice_id: int):
+    creator = None
+    with db_cursor() as conn:
+        creator = conn.execute("SELECT id FROM creators LIMIT 1").fetchone()
+    if not creator:
+        raise HTTPException(404, "No creator")
+    result = await finance_agent_invoice(creator["id"], invoice_id)
+    return result
+
+@app.post("/api/invoices/{invoice_id}/mark-paid")
+async def mark_invoice_paid(invoice_id: int):
+    with db_cursor() as conn:
+        conn.execute("""
+            UPDATE invoices SET status = 'paid', paid_at = datetime('now')
+            WHERE id = ?
+        """, (invoice_id,))
+        # Update creator's cleared revenue
+        inv = conn.execute("SELECT amount, creator_id FROM invoices WHERE id = ?", (invoice_id,)).fetchone()
+        if inv:
+            conn.execute("UPDATE creators SET cleared_revenue = cleared_revenue + ? WHERE id = ?",
+                         (inv["amount"], inv["creator_id"]))
+        return {"status": "paid"}
+
+
+# ─── Approval Gates ───
+
+@app.get("/api/approvals")
+async def get_approvals(status: Optional[str] = None):
+    with db_cursor() as conn:
+        if status:
+            rows = conn.execute("SELECT * FROM approval_queue WHERE status = ? ORDER BY created_at DESC", (status,)).fetchall()
+        else:
+            rows = conn.execute("SELECT * FROM approval_queue ORDER BY created_at DESC").fetchall()
+        return [dict(r) for r in rows]
+
+@app.post("/api/approvals/{approval_id}/resolve")
+async def resolve_approval_gate(approval_id: int, decision: str = Query(...)):
+    if decision not in ("approved", "declined"):
+        raise HTTPException(400, "Decision must be 'approved' or 'declined'")
+    return resolve_approval(approval_id, decision)
+
+
+# ─── Agent Activity Feed ───
+
+@app.get("/api/activities")
+async def get_activities(limit: int = 50):
+    with db_cursor() as conn:
+        rows = conn.execute(
+            "SELECT * FROM agent_activities ORDER BY created_at DESC LIMIT ?", (limit,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+@app.get("/api/agents/status")
+async def agent_status():
+    """Get status of all 4 agents."""
+    with db_cursor() as conn:
+        agents = {}
+        for name, display in [
+            ("deal_agent", "Deal Agent"), ("content_agent", "Content Agent"),
+            ("finance_agent", "Finance Agent"), ("memory_agent", "Memory Agent")
+        ]:
+            last = conn.execute(
+                "SELECT * FROM agent_activities WHERE agent_name = ? ORDER BY created_at DESC LIMIT 1",
+                (name,)
+            ).fetchone()
+            count = conn.execute(
+                "SELECT COUNT(*) FROM agent_activities WHERE agent_name = ?", (name,)
+            ).fetchone()[0]
+            agents[name] = {
+                "name": display,
+                "total_actions": count,
+                "last_action": dict(last) if last else None,
+                "status": "active",
+            }
+        return agents
+
+
+# ─── Memory / Patterns ───
+
+@app.get("/api/memory")
+async def get_memory():
+    with db_cursor() as conn:
+        rows = conn.execute("SELECT * FROM memory_patterns ORDER BY confidence DESC").fetchall()
+        return [dict(r) for r in rows]
+
+@app.post("/api/agents/memory/learn")
+async def learn_patterns():
+    creator = None
+    with db_cursor() as conn:
+        creator = conn.execute("SELECT id FROM creators LIMIT 1").fetchone()
+    if not creator:
+        raise HTTPException(404, "No creator")
+    result = await memory_agent_learn(creator["id"])
+    return result
+
+
+# ─── System ───
+
+@app.get("/api/system/status")
+async def system_status():
+    providers = get_provider_status()
+    active = get_active_provider()
+    return {
+        "name": "CreatorForge OS",
+        "version": "2.0.0",
+        "tagline": "The Agentic Operating System for Creators",
+        "llm_enabled": True,
+        "active_provider": active,
+        "providers": providers,
+        "agents": ["deal_agent", "content_agent", "finance_agent", "memory_agent"],
+        "features": [
+            "Multi-agent orchestration with live activity feed",
+            "Human-in-the-loop approval gates",
+            "Performance memory & pattern learning",
+            "Brand-creator fit scoring & negotiation",
+            "Content drafting & platform optimization",
+            "Invoice generation & payment tracking",
+            "Storefront with real-time sales data",
+            "Multi-provider LLM with automatic failover",
+        ],
+    }
+
+
+# ─── Onboarding ───
+
+class OnboardRequest(BaseModel):
+    company_name: str
+    handle: str
+    industry: str
+    bio: str
+    followers: int = 0
+    monthly_revenue: float = 0
+
+@app.post("/api/onboard")
+async def onboard(req: OnboardRequest):
+    """Onboard a new company/creator. Wipes existing data and starts fresh."""
+    import sqlite3
+    # Delete existing data
+    with db_cursor() as conn:
+        for table in ["agent_thinking", "agent_activities", "approval_queue",
+                       "memory_patterns", "invoices", "content_items", "deals",
+                       "products", "creators"]:
+            conn.execute(f"DELETE FROM {table}")
+        # Reset auto-increment
+        conn.execute("DELETE FROM sqlite_sequence")
+
+        # Insert new creator
+        avatar_map = {
+            "music": "🎵", "tech": "💻", "fitness": "💪", "beauty": "💄",
+            "food": "🍔", "fashion": "👗", "gaming": "🎮", "travel": "✈️",
+            "education": "📚", "business": "💼", "lifestyle": "🌟", "health": "🏥",
+        }
+        avatar = avatar_map.get(req.industry.lower(), "🚀")
+        conn.execute("""
+            INSERT INTO creators (name, handle, bio, niche, followers, monthly_revenue, cleared_revenue, avatar)
+            VALUES (?, ?, ?, ?, ?, ?, 0, ?)
+        """, (req.company_name, req.handle, req.bio, req.industry,
+              req.followers, req.monthly_revenue, avatar))
+        creator_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+        # Log onboarding activity
+        onboard_summary = f"🎉 {req.company_name} onboarded! Industry: {req.industry}, {req.followers:,} followers. All 4 agents are ready to work."
+        conn.execute(
+            "INSERT INTO agent_activities (agent_name, action, summary, status) VALUES ('system', 'onboard', ?, 'completed')",
+            (onboard_summary,)
+        )
+
+    return {
+        "status": "onboarded",
+        "creator_id": creator_id,
+        "message": f"Welcome {req.company_name}! Your workspace is ready. Add deals and content to see the agents in action."
+    }
+
+
+@app.post("/api/reset")
+async def reset_workspace():
+    """Reset everything — go back to onboarding screen."""
+    with db_cursor() as conn:
+        for table in ["agent_thinking", "agent_activities", "approval_queue",
+                       "memory_patterns", "invoices", "content_items", "deals",
+                       "products", "creators"]:
+            conn.execute(f"DELETE FROM {table}")
+        conn.execute("DELETE FROM sqlite_sequence")
+    return {"status": "reset"}
+
+
+@app.get("/api/thinking/recent")
+async def get_recent_thinking(limit: int = 20):
+    """Get recent thinking steps across all agents."""
+    with db_cursor() as conn:
+        rows = conn.execute(
+            """SELECT t.*, a.summary as activity_summary
+               FROM agent_thinking t
+               LEFT JOIN agent_activities a ON t.activity_id = a.id
+               ORDER BY t.created_at DESC LIMIT ?""",
+            (limit,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+@app.get("/api/thinking/activity/{activity_id}")
+async def get_thinking(activity_id: int):
+    """Get the step-by-step thinking process for an agent activity."""
+    with db_cursor() as conn:
+        rows = conn.execute(
+            "SELECT * FROM agent_thinking WHERE activity_id = ? ORDER BY step_number",
+            (activity_id,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+@app.get("/api/thinking/recent")
+async def get_recent_thinking(limit: int = 20):
+    """Get recent thinking steps across all agents."""
+    with db_cursor() as conn:
+        rows = conn.execute(
+            """SELECT t.*, a.summary as activity_summary
+               FROM agent_thinking t
+               LEFT JOIN agent_activities a ON t.activity_id = a.id
+               ORDER BY t.created_at DESC LIMIT ?""",
+            (limit,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+# ─── LLM Provider Management ───
+
+class ProviderKeyRequest(BaseModel):
+    provider: str
+    api_key: str
+
+@app.get("/api/llm/providers")
+async def llm_providers():
+    """Get status of all LLM providers."""
+    return {
+        "providers": get_provider_status(),
+        "active_provider": get_active_provider(),
+    }
+
+@app.post("/api/llm/providers/key")
+async def add_key(req: ProviderKeyRequest):
+    """Add or update a provider API key."""
+    result = add_provider_key(req.provider, req.api_key)
+    return result
+
+@app.delete("/api/llm/providers/{provider}")
+async def remove_key(provider: str):
+    """Remove a provider's API key."""
+    result = remove_provider_key(provider)
+    return result
+
+@app.post("/api/llm/providers/reload")
+async def reload_keys():
+    """Reload provider configuration."""
+    reload_providers()
+    return {"status": "reloaded", "providers": get_provider_status()}
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=9000)
