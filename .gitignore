@@ -33,3 +33,5 @@ Thumbs.db
 dist/
 build/
 backend/documents/
+backend/.enc_key
+backend/.ig_session*

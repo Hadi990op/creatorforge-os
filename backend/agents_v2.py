@@ -406,6 +406,25 @@ async def resolve_approval(approval_id: int, decision: str) -> dict:
                       f"✍️ Auto-scheduled content #{auto_content_id} for approved deal",
                       "content", auto_content_id, status="completed")
 
+    # v3.0: Trigger full autonomous pipeline for approved deals
+    pipeline_result = None
+    if entity_type == "deal" and decision == "approved" and auto_invoice_id:
+        try:
+            from agent_team import process_approved_deal
+            # Run the full pipeline: Finance → Scheduler → Notification
+            creator_id_for_pipeline = deal.get("creator_id", 1) if 'deal' in dir() else 1
+            import asyncio
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # We're in an async context — schedule it
+                asyncio.create_task(process_approved_deal(creator_id_for_pipeline, entity_id))
+            else:
+                pipeline_result = loop.run_until_complete(process_approved_deal(creator_id_for_pipeline, entity_id))
+        except Exception as e:
+            _log_activity("orchestrator", "pipeline_error",
+                          f"⚠️ Autonomous pipeline error: {str(e)[:100]}",
+                          "deal", entity_id, status="failed")
+
     return {
         "status": "resolved",
         "decision": decision,
@@ -413,4 +432,5 @@ async def resolve_approval(approval_id: int, decision: str) -> dict:
         "entity_id": entity_id,
         "auto_invoice_id": auto_invoice_id,
         "auto_content_id": auto_content_id,
+        "pipeline_triggered": pipeline_result is not None or (entity_type == "deal" and decision == "approved"),
     }

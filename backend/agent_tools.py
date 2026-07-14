@@ -198,6 +198,191 @@ TOOL_DEFINITIONS = [
         }
     },
     {
+        "name": "instagram_post",
+        "description": "Post content to Instagram (photo, reel, or story). Requires Instagram to be connected.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "media_type": {"type": "string", "description": "photo, reel, or story"},
+                "media_path": {"type": "string", "description": "Path to the media file (image or video)"},
+                "caption": {"type": "string", "description": "Caption for the post (for photo/reel)"}
+            },
+            "required": ["media_type", "media_path"]
+        }
+    },
+    {
+        "name": "instagram_dm",
+        "description": "Send a direct message to an Instagram user. Requires Instagram to be connected.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "username": {"type": "string", "description": "Instagram username to send DM to"},
+                "message": {"type": "string", "description": "Message text"}
+            },
+            "required": ["username", "message"]
+        }
+    },
+    {
+        "name": "instagram_insights",
+        "description": "Get Instagram analytics and insights. Requires Instagram to be connected.",
+        "parameters": {
+            "type": "object",
+            "properties": {}
+        }
+    },
+    {
+        "name": "youtube_upload",
+        "description": "Upload a video to YouTube. Requires YouTube to be connected.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "video_path": {"type": "string", "description": "Path to the video file"},
+                "title": {"type": "string", "description": "Video title"},
+                "description": {"type": "string", "description": "Video description"},
+                "tags": {"type": "array", "items": {"type": "string"}, "description": "Video tags"},
+                "privacy": {"type": "string", "description": "public, unlisted, or private (default: public)"}
+            },
+            "required": ["video_path", "title", "description"]
+        }
+    },
+    {
+        "name": "youtube_analytics",
+        "description": "Get YouTube channel analytics (subscribers, views, video count). Requires YouTube to be connected.",
+        "parameters": {
+            "type": "object",
+            "properties": {}
+        }
+    },
+    {
+        "name": "send_email",
+        "description": "Send a real email to someone. Requires email (SMTP) to be connected.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "to": {"type": "string", "description": "Recipient email address"},
+                "subject": {"type": "string", "description": "Email subject"},
+                "body": {"type": "string", "description": "Email body (plain text)"},
+                "html": {"type": "boolean", "description": "Whether body is HTML (default: false)"},
+                "cc": {"type": "string", "description": "CC recipients (comma-separated)"},
+                "attachments": {"type": "array", "items": {"type": "string"}, "description": "File paths to attach"}
+            },
+            "required": ["to", "subject", "body"]
+        }
+    },
+    {
+        "name": "stripe_invoice",
+        "description": "Create and send a real Stripe invoice. Requires Stripe to be connected.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "customer_email": {"type": "string", "description": "Customer's email address"},
+                "amount": {"type": "number", "description": "Invoice amount in dollars"},
+                "currency": {"type": "string", "description": "Currency code (default: usd)"},
+                "description": {"type": "string", "description": "Invoice description"}
+            },
+            "required": ["customer_email", "amount", "description"]
+        }
+    },
+    {
+        "name": "stripe_payment_link",
+        "description": "Create a Stripe payment link for a product. Requires Stripe to be connected.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "amount": {"type": "number", "description": "Price in dollars"},
+                "product_name": {"type": "string", "description": "Product name"},
+                "currency": {"type": "string", "description": "Currency code (default: usd)"}
+            },
+            "required": ["amount", "product_name"]
+        }
+    },
+    {
+        "name": "twitter_post",
+        "description": "Post a tweet. Requires Twitter/X to be connected.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "text": {"type": "string", "description": "Tweet text (max 280 characters)"}
+            },
+            "required": ["text"]
+        }
+    },
+    {
+        "name": "twitter_thread",
+        "description": "Post a Twitter thread (multiple tweets). Requires Twitter/X to be connected.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "tweets": {"type": "array", "items": {"type": "string"}, "description": "List of tweet texts"}
+            },
+            "required": ["tweets"]
+        }
+    },
+    {
+        "name": "send_notification",
+        "description": "Send a notification via Slack, Discord, or Telegram. Requires the platform to be connected.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "platform": {"type": "string", "description": "slack, discord, or telegram"},
+                "message": {"type": "string", "description": "Notification message"},
+                "channel": {"type": "string", "description": "Channel (for Slack) or chat_id (for Telegram)"},
+                "webhook_url": {"type": "string", "description": "Discord webhook URL (for Discord)"}
+            },
+            "required": ["platform", "message"]
+        }
+    },
+    {
+        "name": "create_calendar_event",
+        "description": "Create a calendar event (.ics file) for scheduling.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string", "description": "Event title"},
+                "start_time": {"type": "string", "description": "Start time (ISO format: 2026-01-15T14:00:00)"},
+                "end_time": {"type": "string", "description": "End time (ISO format, optional)"},
+                "description": {"type": "string", "description": "Event description"},
+                "location": {"type": "string", "description": "Event location"}
+            },
+            "required": ["title", "start_time"]
+        }
+    },
+    {
+        "name": "github_issue",
+        "description": "Create a GitHub issue. Requires GitHub to be connected.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "repo": {"type": "string", "description": "Repository name (owner/repo format)"},
+                "title": {"type": "string", "description": "Issue title"},
+                "body": {"type": "string", "description": "Issue body (Markdown)"},
+                "labels": {"type": "array", "items": {"type": "string"}, "description": "Issue labels"}
+            },
+            "required": ["repo", "title", "body"]
+        }
+    },
+    {
+        "name": "delegate_to_agent",
+        "description": "Delegate a task to another agent. The other agent will execute it asynchronously.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "to_agent": {"type": "string", "description": "Agent name: deal_agent, content_agent, finance_agent, memory_agent, strategy_agent, outreach_agent, analytics_agent, scheduler_agent, publisher_agent, email_agent, contract_agent, notification_agent"},
+                "task": {"type": "string", "description": "Task description for the other agent"},
+                "priority": {"type": "integer", "description": "Priority 1-10 (1=highest, default: 5)"}
+            },
+            "required": ["to_agent", "task"]
+        }
+    },
+    {
+        "name": "check_platform_status",
+        "description": "Check which platforms are connected and available for actions.",
+        "parameters": {
+            "type": "object",
+            "properties": {}
+        }
+    },
+    {
         "name": "finish",
         "description": "Signal that the agent has completed its task. Provide a summary of what was accomplished.",
         "parameters": {
@@ -247,6 +432,88 @@ async def execute_tool(tool_name: str, arguments: dict, creator_id: int = 1) -> 
             return _create_invoice(arguments, creator_id)
         elif tool_name == "store_memory":
             return _store_memory(arguments, creator_id)
+        elif tool_name == "instagram_post":
+            import platform_connectors as pc
+            media_type = arguments["media_type"]
+            if media_type == "photo":
+                return pc.instagram_post_photo(arguments["media_path"], arguments.get("caption", ""), agent_name="content_agent")
+            elif media_type == "reel":
+                return pc.instagram_post_reel(arguments["media_path"], arguments.get("caption", ""), agent_name="content_agent")
+            elif media_type == "story":
+                return pc.instagram_post_story(arguments["media_path"], agent_name="content_agent")
+            return {"error": f"Unknown media type: {media_type}"}
+        elif tool_name == "instagram_dm":
+            import platform_connectors as pc
+            return pc.instagram_send_dm(arguments["username"], arguments["message"], agent_name="deal_agent")
+        elif tool_name == "instagram_insights":
+            import platform_connectors as pc
+            return pc.instagram_get_insights(agent_name="analytics_agent")
+        elif tool_name == "youtube_upload":
+            import platform_connectors as pc
+            return pc.youtube_upload_video(
+                arguments["video_path"], arguments["title"], arguments["description"],
+                arguments.get("tags", []), arguments.get("privacy", "public"), agent_name="content_agent"
+            )
+        elif tool_name == "youtube_analytics":
+            import platform_connectors as pc
+            return pc.youtube_get_analytics(agent_name="analytics_agent")
+        elif tool_name == "send_email":
+            import platform_connectors as pc
+            return pc.send_email(
+                arguments["to"], arguments["subject"], arguments["body"],
+                arguments.get("html", False), arguments.get("attachments"),
+                arguments.get("cc"), agent_name="email_agent"
+            )
+        elif tool_name == "stripe_invoice":
+            import platform_connectors as pc
+            return pc.stripe_create_invoice(
+                arguments["customer_email"], arguments["amount"],
+                arguments.get("currency", "usd"), arguments["description"], agent_name="finance_agent"
+            )
+        elif tool_name == "stripe_payment_link":
+            import platform_connectors as pc
+            return pc.stripe_create_payment_link(
+                arguments["amount"], arguments.get("currency", "usd"),
+                arguments["product_name"], agent_name="finance_agent"
+            )
+        elif tool_name == "twitter_post":
+            import platform_connectors as pc
+            return pc.twitter_post_tweet(arguments["text"], agent_name="content_agent")
+        elif tool_name == "twitter_thread":
+            import platform_connectors as pc
+            return pc.twitter_post_thread(arguments["tweets"], agent_name="content_agent")
+        elif tool_name == "send_notification":
+            import platform_connectors as pc
+            platform = arguments["platform"]
+            message = arguments["message"]
+            if platform == "slack":
+                return pc.send_slack_notification(arguments.get("channel", "#general"), message, agent_name="notification_agent")
+            elif platform == "discord":
+                return pc.send_discord_notification(arguments.get("webhook_url", ""), message, agent_name="notification_agent")
+            elif platform == "telegram":
+                creds = pc.get_platform_credential("telegram")
+                if creds:
+                    return pc.send_telegram_notification(creds["bot_token"], arguments.get("channel", creds.get("chat_id", "")), message, agent_name="notification_agent")
+                return {"error": "Telegram not connected"}
+            return {"error": f"Unknown notification platform: {platform}"}
+        elif tool_name == "create_calendar_event":
+            import platform_connectors as pc
+            return pc.create_calendar_event(
+                arguments["title"], arguments["start_time"], arguments.get("end_time"),
+                arguments.get("description", ""), arguments.get("location", ""), agent_name="scheduler_agent"
+            )
+        elif tool_name == "github_issue":
+            import platform_connectors as pc
+            return pc.github_create_issue(
+                arguments["repo"], arguments["title"], arguments["body"],
+                arguments.get("labels", []), agent_name="contract_agent"
+            )
+        elif tool_name == "delegate_to_agent":
+            return _delegate_to_agent(arguments["to_agent"], arguments["task"],
+                                      arguments.get("priority", 5), creator_id)
+        elif tool_name == "check_platform_status":
+            import platform_connectors as pc
+            return {"platforms": pc.get_connector_status()}
         elif tool_name == "finish":
             return {"tool": "finish", "summary": arguments["summary"], "result": arguments.get("result", {})}
         else:
@@ -743,3 +1010,53 @@ def get_tools_description() -> str:
         param_str = ", ".join(f'{k}: {v.get("description", k)}' for k, v in params.items())
         lines.append(f"\n- {tool['name']}({param_str}): {tool['description']}")
     return "\n".join(lines)
+
+
+# ═══════════════════════════════════════════════════════════════
+#  Agent-to-Agent Delegation
+# ═══════════════════════════════════════════════════════════════
+
+def _delegate_to_agent(to_agent: str, task: str, priority: int = 5, creator_id: int = 1) -> dict:
+    """Delegate a task to another agent. Creates a task in the agent_tasks table."""
+    with db_cursor() as conn:
+        cur = conn.execute("""
+            INSERT INTO agent_tasks (from_agent, to_agent, task, priority, status, created_at)
+            VALUES (?, ?, ?, ?, 'pending', datetime('now'))
+        """, ("autonomous", to_agent, task, priority))
+        task_id = cur.lastrowid
+    
+    # Log the delegation as an activity
+    conn2 = get_db()
+    conn2.execute("""
+        INSERT INTO agent_activities (agent_name, action, entity_type, summary, details, status, created_at)
+        VALUES (?, 'delegated', ?, ?, ?, 'completed', datetime('now'))
+    """, ("orchestrator", "agent_task", f"Delegated to {to_agent}: {task[:100]}",
+          f'{{"task_id": {task_id}, "to_agent": "{to_agent}"}}'))
+    conn2.commit()
+    conn2.close()
+    
+    return {
+        "status": "delegated",
+        "task_id": task_id,
+        "to_agent": to_agent,
+        "task": task[:200],
+    }
+
+
+def get_pending_agent_tasks(limit: int = 10) -> list:
+    """Get pending agent tasks for execution."""
+    with db_cursor() as conn:
+        rows = conn.execute(
+            "SELECT * FROM agent_tasks WHERE status = 'pending' ORDER BY priority ASC, created_at ASC LIMIT ?",
+            (limit,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def complete_agent_task(task_id: int, result: str):
+    """Mark an agent task as completed."""
+    with db_cursor() as conn:
+        conn.execute("""
+            UPDATE agent_tasks SET status = 'completed', result = ?, completed_at = datetime('now')
+            WHERE id = ?
+        """, (result, task_id))

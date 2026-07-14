@@ -572,6 +572,151 @@ async def reload_keys():
     return {"status": "reloaded", "providers": get_provider_status()}
 
 
+# ═══════════════════════════════════════════════════════════════
+#  v3.0 — PLATFORM CONNECTORS
+# ═══════════════════════════════════════════════════════════════
+
+@app.get("/api/platforms")
+async def get_platforms():
+    """Get all platform connectors and their connection status."""
+    import platform_connectors as pc
+    return {"platforms": pc.get_connector_status()}
+
+
+@app.get("/api/platforms/info")
+async def get_platforms_info():
+    """Get info about all available platform connectors."""
+    return {"connectors": pc.CONNECTOR_INFO}
+
+
+class PlatformConnectRequest(BaseModel):
+    platform: str
+    credentials: dict
+
+
+@app.post("/api/platforms/connect")
+async def connect_platform(req: PlatformConnectRequest):
+    """Connect a platform with credentials."""
+    import platform_connectors as pc
+    if req.platform not in pc.CONNECTOR_INFO:
+        raise HTTPException(400, f"Unknown platform: {req.platform}")
+    
+    # Validate required fields
+    info = pc.CONNECTOR_INFO[req.platform]
+    for field in info["credential_fields"]:
+        if field not in req.credentials:
+            raise HTTPException(400, f"Missing required field: {field}")
+    
+    pc.store_platform_credential(req.platform, req.credentials)
+    return {"status": "connected", "platform": req.platform}
+
+
+@app.post("/api/platforms/{platform}/disconnect")
+async def disconnect_platform(platform: str):
+    """Disconnect a platform."""
+    import platform_connectors as pc
+    pc.disconnect_platform(platform)
+    return {"status": "disconnected", "platform": platform}
+
+
+@app.get("/api/platforms/actions")
+async def get_platform_actions(limit: int = 50):
+    """Get recent platform actions (audit trail)."""
+    import platform_connectors as pc
+    return {"actions": pc.get_platform_actions(limit)}
+
+
+# ═══════════════════════════════════════════════════════════════
+#  v3.0 — AGENT TEAM (12 agents)
+# ═══════════════════════════════════════════════════════════════
+
+@app.get("/api/agents/team")
+async def get_agent_team():
+    """Get the full agent team status."""
+    from agent_team import get_agent_team_status, AGENT_REGISTRY
+    return {
+        "agents": get_agent_team_status(),
+        "total_agents": len(AGENT_REGISTRY),
+        "expert_count": sum(1 for a in AGENT_REGISTRY.values() if a["type"] == "expert"),
+        "worker_count": sum(1 for a in AGENT_REGISTRY.values() if a["type"] == "worker"),
+    }
+
+
+@app.post("/api/agents/{agent_name}/run")
+async def run_agent_endpoint(agent_name: str, task: str = ""):
+    """Run any agent by name with a custom task."""
+    from agent_team import run_agent_by_name
+    if not task:
+        task = f"Run your standard analysis for the creator."
+    result = await run_agent_by_name(agent_name, task)
+    return result
+
+
+# ═══════════════════════════════════════════════════════════════
+#  v3.0 — AUTONOMOUS PIPELINE
+# ═══════════════════════════════════════════════════════════════
+
+@app.post("/api/agents/autopilot")
+async def run_autopilot():
+    """Run the full autonomous pipeline — all agents work together."""
+    from agent_team import run_autonomous_pipeline
+    result = await run_autonomous_pipeline()
+    return result
+
+
+@app.post("/api/agents/process-tasks")
+async def process_agent_tasks():
+    """Process all pending agent-to-agent tasks."""
+    from agent_team import process_pending_agent_tasks
+    result = await process_pending_agent_tasks()
+    return result
+
+
+@app.get("/api/agents/tasks")
+async def get_agent_tasks():
+    """Get all agent-to-agent tasks."""
+    with db_cursor() as conn:
+        rows = conn.execute(
+            "SELECT * FROM agent_tasks ORDER BY created_at DESC LIMIT 50"
+        ).fetchall()
+        return {"tasks": [dict(r) for r in rows]}
+
+
+@app.get("/api/agents/schedules")
+async def get_agent_schedules():
+    """Get all agent schedules."""
+    with db_cursor() as conn:
+        rows = conn.execute(
+            "SELECT * FROM agent_schedules ORDER BY created_at DESC"
+        ).fetchall()
+        return {"schedules": [dict(r) for r in rows]}
+
+
+class ScheduleRequest(BaseModel):
+    agent_name: str
+    schedule: str  # cron expression
+    task: str
+
+
+@app.post("/api/agents/schedules")
+async def create_schedule(req: ScheduleRequest):
+    """Create an agent schedule."""
+    with db_cursor() as conn:
+        conn.execute("""
+            INSERT INTO agent_schedules (agent_name, schedule, task, enabled)
+            VALUES (?, ?, ?, 1)
+        """, (req.agent_name, req.schedule, req.task))
+    return {"status": "created"}
+
+
+@app.delete("/api/agents/schedules/{schedule_id}")
+async def delete_schedule(schedule_id: int):
+    """Delete an agent schedule."""
+    with db_cursor() as conn:
+        conn.execute("DELETE FROM agent_schedules WHERE id = ?", (schedule_id,))
+    return {"status": "deleted"}
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=9000)

@@ -82,7 +82,7 @@ const INDUSTRIES = [
 export default function Dashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<'overview' | 'deals' | 'content' | 'storefront' | 'memory' | 'agents' | 'documents' | 'providers'>('overview');
+  const [tab, setTab] = useState<'overview' | 'deals' | 'content' | 'storefront' | 'memory' | 'agents' | 'documents' | 'platforms' | 'providers'>('overview');
   const [providers, setProviders] = useState<LLMProvider[]>([]);
   const [activeProvider, setActiveProvider] = useState('');
   const [keyProvider, setKeyProvider] = useState('groq');
@@ -266,6 +266,7 @@ export default function Dashboard() {
           ['memory', 'Memory'],
           ['agents', 'Agents'],
           ['documents', 'Documents'],
+          ['platforms', 'Platforms'],
           ['providers', 'AI Providers'],
         ] as const).map(([key, label]) => (
           <button
@@ -321,6 +322,7 @@ export default function Dashboard() {
         {tab === 'documents' && (
           <DocumentsTab documents={data?.documents || []} onReload={load} />
         )}
+        {tab === 'platforms' && <PlatformsTab />}
         {tab === 'providers' && (
           <ProvidersTab
             providers={providers}
@@ -1384,88 +1386,176 @@ function MemoryTab({ patterns, onLearn }: any) {
 // ═══════════════════════════════════════
 
 function AgentsTab({ activities, thinking }: any) {
+  const [agentTeam, setAgentTeam] = useState<any>(null);
+  const [runningAutopilot, setRunningAutopilot] = useState(false);
+  const [autopilotMsg, setAutopilotMsg] = useState('');
+
+  const loadTeam = useCallback(async () => {
+    try {
+      const team = await fetchAPI('/agents/team');
+      setAgentTeam(team);
+    } catch {}
+  }, []);
+
+  useEffect(() => { loadTeam(); }, [loadTeam]);
+
   const agentInfo = [
-    { name: 'deal_agent', display: 'Deal Agent', icon: '🤝', desc: 'Researches brands on the web, analyzes market rates, scores brand fit, negotiates counter-offers, generates proposal documents, creates invoices' },
-    { name: 'content_agent', display: 'Content Agent', icon: '✍️', desc: 'Researches trending topics, searches YouTube for popular content, writes full platform-optimized drafts, generates content calendars' },
-    { name: 'finance_agent', display: 'Finance Agent', icon: '💰', desc: 'Auto-generates invoices from approved deals, researches tax rates, generates financial reports, tracks payments' },
-    { name: 'memory_agent', display: 'Memory Agent', icon: '🧠', desc: 'Analyzes all deals and content, researches industry trends, extracts patterns, stores insights for future agent decisions' },
+    { name: 'deal_agent', display: 'Deal Agent', icon: '🤝', type: 'expert', desc: 'Researches brands on the web, analyzes market rates, scores brand fit, negotiates counter-offers, generates proposal documents' },
+    { name: 'content_agent', display: 'Content Agent', icon: '✍️', type: 'expert', desc: 'Researches trending topics, searches YouTube, writes full platform-optimized drafts, generates content calendars' },
+    { name: 'finance_agent', display: 'Finance Agent', icon: '💰', type: 'expert', desc: 'Auto-generates invoices, creates real Stripe invoices, researches tax rates, generates financial reports' },
+    { name: 'memory_agent', display: 'Memory Agent', icon: '🧠', type: 'expert', desc: 'Analyzes all deals and content, researches industry trends, extracts patterns, stores insights' },
+    { name: 'strategy_agent', display: 'Strategy Agent', icon: '🎯', type: 'expert', desc: 'Analyzes market trends, identifies growth opportunities, plans content and business strategy' },
+    { name: 'outreach_agent', display: 'Outreach Agent', icon: '📬', type: 'expert', desc: 'Finds potential brand partners, researches them, sends outreach emails and Instagram DMs' },
+    { name: 'publisher_agent', display: 'Publisher Agent', icon: '📱', type: 'worker', desc: 'Posts content to connected platforms (Instagram, YouTube, Twitter) at scheduled times' },
+    { name: 'email_agent', display: 'Email Agent', icon: '📧', type: 'worker', desc: 'Sends real emails to brands, clients, and partners via SMTP' },
+    { name: 'contract_agent', display: 'Contract Agent', icon: '📋', type: 'worker', desc: 'Generates legal documents, contracts, and proposals' },
+    { name: 'analytics_agent', display: 'Analytics Agent', icon: '📊', type: 'worker', desc: 'Tracks performance metrics across all connected platforms' },
+    { name: 'scheduler_agent', display: 'Scheduler Agent', icon: '📅', type: 'worker', desc: 'Manages content calendar, schedules posts and deliverables' },
+    { name: 'notification_agent', display: 'Notification Agent', icon: '🔔', type: 'worker', desc: 'Sends alerts via Slack, Discord, or Telegram' },
   ];
+
+  const runAutopilot = async () => {
+    setRunningAutopilot(true);
+    setAutopilotMsg('🚀 Running autonomous pipeline: Memory → Strategy → Analytics...');
+    try {
+      const result = await fetchAPI('/agents/autopilot', { method: 'POST' });
+      setAutopilotMsg('✅ Autopilot complete! All agents executed.');
+    } catch (e: any) {
+      setAutopilotMsg(`⚠️ Autopilot started (running in background)`);
+    }
+    setRunningAutopilot(false);
+    setTimeout(() => loadTeam(), 3000);
+  };
+
+  const runAgent = async (agentName: string) => {
+    try {
+      await fetchAPI(`/agents/${agentName}/run`, { method: 'POST' });
+      setAutopilotMsg(`✅ ${agentName} executed`);
+      setTimeout(() => loadTeam(), 2000);
+    } catch (e: any) {
+      setAutopilotMsg(`⚠️ ${agentName} running...`);
+    }
+  };
 
   return (
     <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      <h2 style={{ fontSize: '1.3rem' }}>Agent Orchestra</h2>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <h2 style={{ fontSize: '1.3rem' }}>Agent Team</h2>
+        <button
+          onClick={runAutopilot}
+          disabled={runningAutopilot}
+          style={{
+            padding: '10px 20px', background: runningAutopilot ? 'var(--color-surface)' : 'var(--color-accent)',
+            border: 'none', borderRadius: 8, color: '#fff', cursor: runningAutopilot ? 'wait' : 'pointer',
+            fontSize: '0.85rem', fontWeight: 600,
+          }}
+        >
+          {runningAutopilot ? '⏳ Running...' : '🚀 Run Autopilot'}
+        </button>
+      </div>
 
-      {/* What is this */}
+      {autopilotMsg && (
+        <div style={{ padding: '12px 16px', background: 'var(--color-surface)', borderRadius: 8, fontSize: '0.85rem', border: '1px solid var(--color-border)' }}>
+          {autopilotMsg}
+        </div>
+      )}
+
+      {/* How It Works */}
       <div style={{
         background: 'var(--color-surface)', border: '1px solid var(--color-border)',
         borderRadius: 12, padding: '20px',
       }}>
-        <h3 style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '10px' }}>How It Works</h3>
+        <h3 style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '10px' }}>How It Works — The 2030 Vision, Live</h3>
         <div style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)', lineHeight: 1.7 }}>
-          Four AI agents work together autonomously. Each agent uses a <strong>ReAct (Reason + Act) loop</strong> — it plans which tools to use, executes them (web search, market research, document generation), analyzes the results with AI, and takes real actions.
-          When a deal is approved, the Finance Agent auto-generates an invoice and the Content Agent auto-schedules content. Nothing goes out without your sign-off.
+          <strong>12 AI agents</strong> work together as a full autonomous company — {agentTeam?.expert_count || 6} expert agents (strategic) and {agentTeam?.worker_count || 6} worker agents (execution).
+          Each agent uses a <strong>ReAct loop</strong> to plan, execute real tools, and analyze results.
+          Agents delegate tasks to each other, run on schedules, and take <strong>real actions</strong> on connected platforms — post to Instagram, upload to YouTube, send emails, create Stripe invoices.
+          The creator approves only what matters; everything else is autonomous.
         </div>
         <div style={{ marginTop: '12px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-          {['🌐 web_search', '📺 youtube_search', '📊 market_rate_research', '🔍 competitor_analysis', '📄 generate_document', '💳 create_invoice', '📅 create_content_calendar', '🧠 store_memory'].map(t => (
+          {['🌐 web_search', '📺 youtube_search', '📊 market_rate_research', '📸 instagram_post', '📤 youtube_upload', '📧 send_email', '💳 stripe_invoice', '🐦 twitter_post', '📅 create_calendar_event', '🔔 send_notification', '🤝 delegate_to_agent'].map(t => (
             <code key={t} style={{ fontSize: '0.68rem', padding: '3px 8px', background: 'var(--color-bg)', borderRadius: 4, color: 'var(--color-text-muted)' }}>{t}</code>
           ))}
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '16px' }}>
-        {agentInfo.map(a => {
-          const agentActivities = activities.filter((act: any) => act.agent_name === a.name);
-          return (
-            <div key={a.name} style={{
-              background: 'var(--color-surface)',
-              border: '1px solid var(--color-border)',
-              borderRadius: 12, padding: '16px',
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                <span style={{ fontSize: '1.5rem' }}>{a.icon}</span>
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{a.display}</div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <span className="pulse-dot" style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--color-success)' }} />
-                    <span style={{ fontSize: '0.7rem', color: 'var(--color-success)' }}>active</span>
+      {/* Expert Agents */}
+      <div>
+        <h3 style={{ fontSize: '0.95rem', fontWeight: 600, marginBottom: '12px' }}>🧠 Expert Agents</h3>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '14px' }}>
+          {agentInfo.filter(a => a.type === 'expert').map(a => {
+            const teamData = agentTeam?.agents?.find((t: any) => t.name === a.name);
+            return (
+              <div key={a.name} style={{
+                background: 'var(--color-surface)', border: teamData?.last_active ? '1px solid var(--color-accent)' : '1px solid var(--color-border)',
+                borderRadius: 12, padding: '16px',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                  <span style={{ fontSize: '1.3rem' }}>{a.icon}</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 700, fontSize: '0.88rem' }}>{a.display}</div>
+                    <div style={{ fontSize: '0.65rem', color: teamData?.last_active ? '#4caf50' : 'var(--color-text-muted)' }}>
+                      {teamData?.last_active ? `● Active · ${teamData.total_activities} runs` : '○ Never run'}
+                    </div>
                   </div>
                 </div>
+                <div style={{ fontSize: '0.76rem', color: 'var(--color-text-muted)', marginBottom: '10px', lineHeight: 1.5 }}>
+                  {a.desc}
+                </div>
+                <button
+                  onClick={() => runAgent(a.name)}
+                  style={{ width: '100%', padding: '6px', background: 'var(--color-accent)', border: 'none', borderRadius: 6, color: '#fff', cursor: 'pointer', fontSize: '0.75rem' }}
+                >Run Agent →</button>
               </div>
-              <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', marginBottom: '12px' }}>
-                {a.desc}
-              </div>
-              <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
-                {agentActivities.length} actions logged
-              </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
 
-      {/* Agent Thinking Process */}
+      {/* Worker Agents */}
+      <div>
+        <h3 style={{ fontSize: '0.95rem', fontWeight: 600, marginBottom: '12px' }}>⚙️ Worker Agents</h3>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '14px' }}>
+          {agentInfo.filter(a => a.type === 'worker').map(a => {
+            const teamData = agentTeam?.agents?.find((t: any) => t.name === a.name);
+            return (
+              <div key={a.name} style={{
+                background: 'var(--color-surface)', border: teamData?.last_active ? '1px solid var(--color-accent)' : '1px solid var(--color-border)',
+                borderRadius: 12, padding: '16px',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                  <span style={{ fontSize: '1.3rem' }}>{a.icon}</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 700, fontSize: '0.88rem' }}>{a.display}</div>
+                    <div style={{ fontSize: '0.65rem', color: teamData?.last_active ? '#4caf50' : 'var(--color-text-muted)' }}>
+                      {teamData?.last_active ? `● Active · ${teamData.total_activities} runs` : '○ Never run'}
+                    </div>
+                  </div>
+                </div>
+                <div style={{ fontSize: '0.76rem', color: 'var(--color-text-muted)', marginBottom: '10px', lineHeight: 1.5 }}>
+                  {a.desc}
+                </div>
+                <button
+                  onClick={() => runAgent(a.name)}
+                  style={{ width: '100%', padding: '6px', background: 'var(--color-accent)', border: 'none', borderRadius: 6, color: '#fff', cursor: 'pointer', fontSize: '0.75rem' }}
+                >Run Agent →</button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Live Thinking */}
       {thinking && thinking.length > 0 && (
         <div>
-          <h3 style={{ fontSize: '1rem', marginBottom: '12px' }}>🧠 Live Agent Thinking</h3>
-          <div style={{
-            background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-            borderRadius: 12, padding: '16px', maxHeight: '400px', overflow: 'auto',
-          }}>
+          <h3 style={{ fontSize: '0.95rem', fontWeight: 600, marginBottom: '12px' }}>Live Agent Thinking</h3>
+          <div style={{ background: 'var(--color-surface)', borderRadius: 12, padding: '16px', maxHeight: '400px', overflow: 'auto', border: '1px solid var(--color-border)' }}>
             {thinking.map((t: any, i: number) => (
-              <div key={t.id || i} className="slide-in" style={{
-                display: 'flex', alignItems: 'start', gap: '10px',
-                padding: '10px 0', borderBottom: i < thinking.length - 1 ? '1px solid var(--color-border)' : 'none',
-              }}>
-                <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>
-                  {PHASE_ICONS[t.phase] || '💭'}
-                </span>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginBottom: '2px' }}>
-                    {AGENT_ICONS[t.agent_name] || '🤖'} {t.agent_name.replace(/_/g, ' ')} · {t.phase.replace(/_/g, ' ')} · step {t.step_number}
-                  </div>
-                  <div style={{ fontSize: '0.82rem', color: 'var(--color-text)' }}>{t.thought}</div>
-                </div>
-                <span className="mono" style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)', flexShrink: 0 }}>
-                  {new Date(t.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              <div key={i} style={{ padding: '6px 0', borderBottom: i < thinking.length - 1 ? '1px solid var(--color-border)' : 'none' }}>
+                <span style={{ fontSize: '0.8rem' }}>
+                  <span style={{ color: 'var(--color-accent)' }}>{(PHASE_ICONS as any)[t.phase] || '🔹'}</span>
+                  <span style={{ color: 'var(--color-text-muted)', fontSize: '0.7rem', margin: '0 6px' }}>[{t.agent_name}]</span>
+                  {t.thought}
                 </span>
               </div>
             ))}
@@ -1475,34 +1565,15 @@ function AgentsTab({ activities, thinking }: any) {
 
       {/* Activity Feed */}
       <div>
-        <h3 style={{ fontSize: '1rem', marginBottom: '12px' }}>Live Activity Feed</h3>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          {activities.length === 0 ? (
-            <div style={{
-              padding: '24px', textAlign: 'center', color: 'var(--color-text-muted)',
-              background: 'var(--color-surface)', borderRadius: 12, fontSize: '0.85rem',
-            }}>
-              No agent activity yet. Add deals or content to see the agents in action.
+        <h3 style={{ fontSize: '0.95rem', fontWeight: 600, marginBottom: '12px' }}>Recent Activity</h3>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          {activities.slice(0, 15).map((a: any, i: number) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', background: 'var(--color-surface)', borderRadius: 8, fontSize: '0.78rem' }}>
+              <Badge style={{ background: 'rgba(255,87,34,0.1)', color: 'var(--color-accent)', border: 'none', fontSize: '0.6rem' }}>{a.agent_name}</Badge>
+              <span>{a.summary}</span>
+              <span style={{ marginLeft: 'auto', color: 'var(--color-text-muted)', fontSize: '0.68rem' }}>{new Date(a.created_at).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}</span>
             </div>
-          ) : (
-            activities.map((a: any, i: number) => (
-              <div key={a.id || i} className="slide-in" style={{
-                display: 'flex', alignItems: 'center', gap: '10px',
-                padding: '10px 12px',
-                background: 'var(--color-surface)', borderRadius: 8, fontSize: '0.82rem',
-              }}>
-                <span style={{ fontSize: '1.1rem' }}>{AGENT_ICONS[a.agent_name] || '⚙️'}</span>
-                <span style={{
-                  width: 8, height: 8, borderRadius: '50%',
-                  background: STATUS_COLORS[a.status] || '#666', flexShrink: 0,
-                }} />
-                <span style={{ flex: 1 }}>{a.summary}</span>
-                <span className="mono" style={{ color: 'var(--color-text-muted)', fontSize: '0.7rem' }}>
-                  {new Date(a.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </span>
-              </div>
-            ))
-          )}
+          ))}
         </div>
       </div>
     </div>
@@ -1604,6 +1675,164 @@ function DocumentsTab({ documents, onReload }: any) {
                 Select a document to preview
               </div>
             )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════
+// PLATFORMS TAB (Real-world connections)
+// ═══════════════════════════════════════
+
+function PlatformsTab() {
+  const [platforms, setPlatforms] = useState<any[]>([]);
+  const [actions, setActions] = useState<any[]>([]);
+  const [connecting, setConnecting] = useState<string | null>(null);
+  const [credForm, setCredForm] = useState<Record<string, string>>({});
+  const [msg, setMsg] = useState('');
+
+  const loadPlatforms = useCallback(async () => {
+    const [p, a] = await Promise.all([
+      fetchAPI('/platforms'),
+      fetchAPI('/platforms/actions?limit=20'),
+    ]);
+    setPlatforms(p.platforms || []);
+    setActions(a.actions || []);
+  }, []);
+
+  useEffect(() => { loadPlatforms(); }, [loadPlatforms]);
+
+  const handleConnect = async (platform: string, fields: string[]) => {
+    const credentials: Record<string, string> = {};
+    for (const f of fields) {
+      credentials[f] = credForm[`${platform}_${f}`] || '';
+      if (!credentials[f]) {
+        setMsg(`Please fill in ${f}`);
+        return;
+      }
+    }
+    try {
+      await fetchAPI('/platforms/connect', {
+        method: 'POST',
+        body: JSON.stringify({ platform, credentials }),
+      });
+      setMsg(`✅ ${platform} connected successfully!`);
+      setCredForm({});
+      setConnecting(null);
+      loadPlatforms();
+    } catch (e: any) {
+      setMsg(`❌ Failed: ${e.message}`);
+    }
+  };
+
+  const handleDisconnect = async (platform: string) => {
+    await fetchAPI(`/platforms/${platform}/disconnect`, { method: 'POST' });
+    loadPlatforms();
+  };
+
+  const platformInfo: Record<string, { icon: string; desc: string; fields: string[]; help: string }> = {
+    instagram: { icon: '📸', desc: 'Post photos, reels, stories. Send DMs. Get insights.', fields: ['username', 'password'], help: 'Instagram username and password' },
+    youtube: { icon: '📺', desc: 'Upload videos. Get analytics. Reply to comments.', fields: ['client_id', 'client_secret', 'access_token', 'refresh_token'], help: 'OAuth2 credentials from Google Cloud Console' },
+    email: { icon: '📧', desc: 'Send real emails to brands, clients, partners.', fields: ['smtp_server', 'smtp_port', 'username', 'password'], help: 'SMTP server details (e.g. smtp.gmail.com:587)' },
+    stripe: { icon: '💳', desc: 'Create real invoices, payment links, track payments.', fields: ['secret_key'], help: 'Stripe secret key (sk_...)' },
+    twitter: { icon: '🐦', desc: 'Post tweets and threads.', fields: ['consumer_key', 'consumer_secret', 'access_token', 'access_token_secret'], help: 'Twitter API v2 credentials' },
+    slack: { icon: '💬', desc: 'Send notifications to Slack channels.', fields: ['webhook_url'], help: 'Slack incoming webhook URL' },
+    github: { icon: '🐙', desc: 'Create issues, manage repos.', fields: ['token'], help: 'GitHub personal access token' },
+    telegram: { icon: '✈️', desc: 'Send notifications via Telegram bot.', fields: ['bot_token', 'chat_id'], help: 'Bot token from @BotFather' },
+  };
+
+  return (
+    <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      <div>
+        <h2 style={{ fontSize: '1.3rem' }}>Platform Connections</h2>
+        <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginTop: '4px' }}>
+          Connect real platforms so agents can take real actions — post to Instagram, upload to YouTube, send emails, create Stripe invoices, and more.
+        </div>
+      </div>
+
+      {msg && (
+        <div style={{ padding: '10px 14px', background: 'var(--color-surface)', borderRadius: 8, fontSize: '0.85rem', border: '1px solid var(--color-border)' }}>
+          {msg}
+        </div>
+      )}
+
+      {/* Platform Grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px' }}>
+        {platforms.map((p) => {
+          const info = platformInfo[p.platform] || { icon: '🔌', desc: p.description, fields: [], help: '' };
+          return (
+            <div key={p.platform} style={{
+              background: 'var(--color-surface)', border: p.connected ? '1px solid var(--color-accent)' : '1px solid var(--color-border)',
+              borderRadius: 12, padding: '20px',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span style={{ fontSize: '1.5rem' }}>{info.icon}</span>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>{p.display}</div>
+                    <Badge style={{
+                      background: p.connected ? 'rgba(76,175,80,0.15)' : 'rgba(255,255,255,0.05)',
+                      color: p.connected ? '#4caf50' : 'var(--color-text-muted)',
+                      border: 'none', fontSize: '0.65rem',
+                    }}>{p.connected ? '● CONNECTED' : '○ NOT CONNECTED'}</Badge>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', marginBottom: '14px', lineHeight: 1.5 }}>
+                {info.desc}
+              </div>
+
+              {p.connected ? (
+                <button
+                  onClick={() => handleDisconnect(p.platform)}
+                  style={{ width: '100%', padding: '8px', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: '0.8rem' }}
+                >Disconnect</button>
+              ) : connecting === p.platform ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {info.fields.map((f) => (
+                    <input
+                      key={f}
+                      type={f.includes('password') || f.includes('secret') || f.includes('token') || f.includes('key') ? 'password' : 'text'}
+                      placeholder={f}
+                      value={credForm[`${p.platform}_${f}`] || ''}
+                      onChange={(e) => setCredForm({ ...credForm, [`${p.platform}_${f}`]: e.target.value })}
+                      style={{ width: '100%', padding: '8px 10px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text)', fontSize: '0.8rem' }}
+                    />
+                  ))}
+                  <div style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)' }}>{info.help}</div>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button onClick={() => handleConnect(p.platform, info.fields)} style={{ flex: 1, padding: '8px', background: 'var(--color-accent)', border: 'none', borderRadius: 6, color: '#fff', cursor: 'pointer', fontSize: '0.8rem' }}>Connect</button>
+                    <button onClick={() => { setConnecting(null); setCredForm({}); }} style={{ padding: '8px 12px', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: '0.8rem' }}>Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setConnecting(p.platform)}
+                  style={{ width: '100%', padding: '8px', background: 'var(--color-accent)', border: 'none', borderRadius: 6, color: '#fff', cursor: 'pointer', fontSize: '0.8rem' }}
+                >Connect {p.display}</button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Recent Platform Actions */}
+      {actions.length > 0 && (
+        <div>
+          <h3 style={{ fontSize: '0.95rem', fontWeight: 600, marginBottom: '12px' }}>Recent Platform Actions</h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            {actions.map((a, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', background: 'var(--color-surface)', borderRadius: 8, fontSize: '0.78rem' }}>
+                <span style={{ color: a.status === 'success' ? '#4caf50' : '#f44336' }}>{a.status === 'success' ? '✅' : '❌'}</span>
+                <strong>{a.platform}</strong>
+                <span style={{ color: 'var(--color-text-muted)' }}>{a.action}</span>
+                {a.agent_name && <Badge style={{ background: 'rgba(255,87,34,0.1)', color: 'var(--color-accent)', border: 'none', fontSize: '0.6rem' }}>{a.agent_name}</Badge>}
+                <span style={{ marginLeft: 'auto', color: 'var(--color-text-muted)', fontSize: '0.7rem' }}>{new Date(a.created_at).toLocaleString()}</span>
+              </div>
+            ))}
           </div>
         </div>
       )}

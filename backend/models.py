@@ -190,6 +190,59 @@ def init_db():
     );
     CREATE INDEX IF NOT EXISTS idx_documents_creator ON documents(creator_id);
     CREATE INDEX IF NOT EXISTS idx_documents_entity ON documents(related_entity_type, related_entity_id);
+
+    -- v3.0: Platform connections (encrypted credentials)
+    CREATE TABLE IF NOT EXISTS platform_credentials (
+        platform TEXT PRIMARY KEY,
+        credentials TEXT NOT NULL,  -- encrypted JSON
+        status TEXT DEFAULT 'connected',
+        created_at TEXT,
+        updated_at TEXT
+    );
+
+    -- v3.0: Platform action log (audit trail)
+    CREATE TABLE IF NOT EXISTS platform_actions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        platform TEXT NOT NULL,
+        action TEXT NOT NULL,
+        status TEXT NOT NULL,
+        details TEXT,
+        agent_name TEXT,
+        entity_type TEXT,
+        entity_id INTEGER,
+        created_at TEXT DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_platform_actions_created ON platform_actions(created_at DESC);
+
+    -- v3.0: Agent-to-agent task queue
+    CREATE TABLE IF NOT EXISTS agent_tasks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        from_agent TEXT NOT NULL,
+        to_agent TEXT NOT NULL,
+        task TEXT NOT NULL,
+        status TEXT DEFAULT 'pending',
+        -- pending | executing | completed | failed
+        result TEXT,
+        priority INTEGER DEFAULT 5,
+        entity_type TEXT,
+        entity_id INTEGER,
+        created_at TEXT DEFAULT (datetime('now')),
+        started_at TEXT,
+        completed_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_agent_tasks_status ON agent_tasks(status);
+
+    -- v3.0: Autonomous schedules (cron-driven agent runs)
+    CREATE TABLE IF NOT EXISTS agent_schedules (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        agent_name TEXT NOT NULL,
+        schedule TEXT NOT NULL,  -- cron expression
+        task TEXT NOT NULL,
+        enabled INTEGER DEFAULT 1,
+        last_run TEXT,
+        next_run TEXT,
+        created_at TEXT DEFAULT (datetime('now'))
+    );
     """)
     conn.commit()
     conn.close()
