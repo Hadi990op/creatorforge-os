@@ -176,6 +176,20 @@ def init_db():
         created_at TEXT DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS idx_thinking_activity ON agent_thinking(activity_id);
+
+    CREATE TABLE IF NOT EXISTS documents (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        creator_id INTEGER NOT NULL REFERENCES creators(id),
+        doc_type TEXT NOT NULL,
+        title TEXT NOT NULL,
+        content TEXT NOT NULL,
+        filename TEXT,
+        related_entity_type TEXT,
+        related_entity_id INTEGER,
+        created_at TEXT DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_documents_creator ON documents(creator_id);
+    CREATE INDEX IF NOT EXISTS idx_documents_entity ON documents(related_entity_type, related_entity_id);
     """)
     conn.commit()
     conn.close()
@@ -273,3 +287,13 @@ class ApprovalItem(BaseModel):
     title: str
     summary: str
     status: str = "pending"
+
+class Document(BaseModel):
+    id: Optional[int] = None
+    creator_id: int
+    doc_type: str
+    title: str
+    content: str
+    filename: Optional[str] = None
+    related_entity_type: Optional[str] = None
+    related_entity_id: Optional[int] = None

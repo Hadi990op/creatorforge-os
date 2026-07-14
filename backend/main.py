@@ -18,7 +18,7 @@ from typing import Optional, List
 
 from models import init_db, db_cursor
 from seed import seed
-from agents import (
+from agents_v2 import (
     deal_agent_analyze, content_agent_draft,
     finance_agent_invoice, memory_agent_learn,
     resolve_approval,
@@ -29,8 +29,8 @@ from llm_engine import (
     reload_providers, get_active_provider,
 )
 
-app = FastAPI(title="CreatorForge OS", version="1.0.0",
-              description="The Agentic Operating System for Creators")
+app = FastAPI(title="CreatorForge OS", version="2.0.0",
+              description="The Agentic Operating System for Creators — ReAct Agent Engine")
 
 app.add_middleware(
     CORSMiddleware,
@@ -97,6 +97,10 @@ async def dashboard():
                LEFT JOIN agent_activities a ON t.activity_id = a.id
                ORDER BY t.created_at DESC LIMIT 30"""
         ).fetchall()]
+        documents = [dict(r) for r in conn.execute(
+            "SELECT * FROM documents WHERE creator_id = ? ORDER BY created_at DESC LIMIT 20",
+            (creator["id"],)
+        ).fetchall()]
 
         total_sales = sum(p["sales_count"] for p in products)
         total_revenue_from_sales = sum(p["price"] * p["sales_count"] for p in products)
@@ -131,6 +135,7 @@ async def dashboard():
         "recent_activities": activities,
         "patterns": patterns,
         "recent_thinking": recent_thinking,
+        "documents": documents,
     }
 
 
@@ -336,7 +341,7 @@ async def get_approvals(status: Optional[str] = None):
 async def resolve_approval_gate(approval_id: int, decision: str = Query(...)):
     if decision not in ("approved", "declined"):
         raise HTTPException(400, "Decision must be 'approved' or 'declined'")
-    return resolve_approval(approval_id, decision)
+    return await resolve_approval(approval_id, decision)
 
 
 # ─── Agent Activity Feed ───
@@ -438,7 +443,7 @@ async def onboard(req: OnboardRequest):
     with db_cursor() as conn:
         for table in ["agent_thinking", "agent_activities", "approval_queue",
                        "memory_patterns", "invoices", "content_items", "deals",
-                       "products", "creators"]:
+                       "products", "documents", "creators"]:
             conn.execute(f"DELETE FROM {table}")
         # Reset auto-increment
         conn.execute("DELETE FROM sqlite_sequence")
@@ -477,10 +482,36 @@ async def reset_workspace():
     with db_cursor() as conn:
         for table in ["agent_thinking", "agent_activities", "approval_queue",
                        "memory_patterns", "invoices", "content_items", "deals",
-                       "products", "creators"]:
+                       "products", "documents", "creators"]:
             conn.execute(f"DELETE FROM {table}")
         conn.execute("DELETE FROM sqlite_sequence")
     return {"status": "reset"}
+
+
+# ─── Documents ───
+
+@app.get("/api/documents")
+async def get_documents(entity_type: Optional[str] = None, entity_id: Optional[int] = None):
+    """Get all documents, optionally filtered by entity."""
+    with db_cursor() as conn:
+        if entity_type and entity_id:
+            rows = conn.execute(
+                "SELECT * FROM documents WHERE related_entity_type = ? AND related_entity_id = ? ORDER BY created_at DESC",
+                (entity_type, entity_id)
+            ).fetchall()
+        else:
+            rows = conn.execute("SELECT * FROM documents ORDER BY created_at DESC").fetchall()
+        return [dict(r) for r in rows]
+
+
+@app.get("/api/documents/{doc_id}")
+async def get_document(doc_id: int):
+    """Get a specific document."""
+    with db_cursor() as conn:
+        row = conn.execute("SELECT * FROM documents WHERE id = ?", (doc_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "Document not found")
+        return dict(row)
 
 
 @app.get("/api/thinking/recent")
@@ -504,20 +535,6 @@ async def get_thinking(activity_id: int):
         rows = conn.execute(
             "SELECT * FROM agent_thinking WHERE activity_id = ? ORDER BY step_number",
             (activity_id,)
-        ).fetchall()
-        return [dict(r) for r in rows]
-
-
-@app.get("/api/thinking/recent")
-async def get_recent_thinking(limit: int = 20):
-    """Get recent thinking steps across all agents."""
-    with db_cursor() as conn:
-        rows = conn.execute(
-            """SELECT t.*, a.summary as activity_summary
-               FROM agent_thinking t
-               LEFT JOIN agent_activities a ON t.activity_id = a.id
-               ORDER BY t.created_at DESC LIMIT ?""",
-            (limit,)
         ).fetchall()
         return [dict(r) for r in rows]
 

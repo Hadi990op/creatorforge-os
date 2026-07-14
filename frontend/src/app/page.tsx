@@ -14,6 +14,7 @@ interface DashboardData {
   recent_activities: any[];
   patterns: any[];
   recent_thinking?: any[];
+  documents?: any[];
 }
 
 interface LLMProvider {
@@ -63,6 +64,14 @@ const PHASE_ICONS: Record<string, string> = {
   strategy: '🎨',
   pattern_mining: '🔍',
   result: '✅',
+  planning: '🧠',
+  plan_ready: '📋',
+  tool_call: '🔧',
+  tool_result: '📊',
+  analyzing: '🔬',
+  task_received: '📨',
+  error: '❌',
+  max_iterations: '⏰',
 };
 
 const INDUSTRIES = [
@@ -73,7 +82,7 @@ const INDUSTRIES = [
 export default function Dashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<'overview' | 'deals' | 'content' | 'storefront' | 'memory' | 'agents' | 'providers'>('overview');
+  const [tab, setTab] = useState<'overview' | 'deals' | 'content' | 'storefront' | 'memory' | 'agents' | 'documents' | 'providers'>('overview');
   const [providers, setProviders] = useState<LLMProvider[]>([]);
   const [activeProvider, setActiveProvider] = useState('');
   const [keyProvider, setKeyProvider] = useState('groq');
@@ -256,6 +265,7 @@ export default function Dashboard() {
           ['storefront', 'Storefront'],
           ['memory', 'Memory'],
           ['agents', 'Agents'],
+          ['documents', 'Documents'],
           ['providers', 'AI Providers'],
         ] as const).map(([key, label]) => (
           <button
@@ -308,6 +318,9 @@ export default function Dashboard() {
         {tab === 'storefront' && <StorefrontTab products={products} stats={stats} onReload={load} />}
         {tab === 'memory' && <MemoryTab patterns={patterns} onLearn={learnMemory} />}
         {tab === 'agents' && <AgentsTab activities={recent_activities} thinking={thinking} />}
+        {tab === 'documents' && (
+          <DocumentsTab documents={data?.documents || []} onReload={load} />
+        )}
         {tab === 'providers' && (
           <ProvidersTab
             providers={providers}
@@ -1372,10 +1385,10 @@ function MemoryTab({ patterns, onLearn }: any) {
 
 function AgentsTab({ activities, thinking }: any) {
   const agentInfo = [
-    { name: 'deal_agent', display: 'Deal Agent', icon: '🤝', desc: 'Captures inbound brand deals, scores fit, negotiates terms, routes for approval' },
-    { name: 'content_agent', display: 'Content Agent', icon: '✍️', desc: 'Takes briefs, generates content drafts, manages approval and scheduling' },
-    { name: 'finance_agent', display: 'Finance Agent', icon: '💰', desc: 'Generates invoices, tracks payments, manages payouts' },
-    { name: 'memory_agent', display: 'Memory Agent', icon: '🧠', desc: 'Records outcomes, identifies patterns, improves future decisions' },
+    { name: 'deal_agent', display: 'Deal Agent', icon: '🤝', desc: 'Researches brands on the web, analyzes market rates, scores brand fit, negotiates counter-offers, generates proposal documents, creates invoices' },
+    { name: 'content_agent', display: 'Content Agent', icon: '✍️', desc: 'Researches trending topics, searches YouTube for popular content, writes full platform-optimized drafts, generates content calendars' },
+    { name: 'finance_agent', display: 'Finance Agent', icon: '💰', desc: 'Auto-generates invoices from approved deals, researches tax rates, generates financial reports, tracks payments' },
+    { name: 'memory_agent', display: 'Memory Agent', icon: '🧠', desc: 'Analyzes all deals and content, researches industry trends, extracts patterns, stores insights for future agent decisions' },
   ];
 
   return (
@@ -1389,9 +1402,13 @@ function AgentsTab({ activities, thinking }: any) {
       }}>
         <h3 style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '10px' }}>How It Works</h3>
         <div style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)', lineHeight: 1.7 }}>
-          Four AI agents work together to run your creator business. Each agent uses real AI (LLM) to analyze, reason, and produce results.
-          When you add a deal or content brief, the relevant agent picks it up, thinks through the problem step by step, and produces output for your approval.
-          Nothing goes out without your sign-off.
+          Four AI agents work together autonomously. Each agent uses a <strong>ReAct (Reason + Act) loop</strong> — it plans which tools to use, executes them (web search, market research, document generation), analyzes the results with AI, and takes real actions.
+          When a deal is approved, the Finance Agent auto-generates an invoice and the Content Agent auto-schedules content. Nothing goes out without your sign-off.
+        </div>
+        <div style={{ marginTop: '12px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+          {['🌐 web_search', '📺 youtube_search', '📊 market_rate_research', '🔍 competitor_analysis', '📄 generate_document', '💳 create_invoice', '📅 create_content_calendar', '🧠 store_memory'].map(t => (
+            <code key={t} style={{ fontSize: '0.68rem', padding: '3px 8px', background: 'var(--color-bg)', borderRadius: 4, color: 'var(--color-text-muted)' }}>{t}</code>
+          ))}
         </div>
       </div>
 
@@ -1488,6 +1505,108 @@ function AgentsTab({ activities, thinking }: any) {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════
+// DOCUMENTS TAB
+// ═══════════════════════════════════════
+
+function DocumentsTab({ documents, onReload }: any) {
+  const [selectedDoc, setSelectedDoc] = useState<any>(null);
+
+  return (
+    <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      <div>
+        <h2 style={{ fontSize: '1.3rem' }}>Generated Documents</h2>
+        <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginTop: '4px' }}>
+          Documents automatically generated by agents — contracts, proposals, invoices, reports
+        </div>
+      </div>
+
+      {documents.length === 0 ? (
+        <div style={{
+          padding: '40px', textAlign: 'center', background: 'var(--color-surface)',
+          borderRadius: 12, border: '1px solid var(--color-border)',
+        }}>
+          <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>📄</div>
+          <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '8px' }}>No documents yet</h3>
+          <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
+            When agents process deals and content, they automatically generate documents like
+            counter-offer proposals, contracts, invoices, and content strategy reports.
+            <br/><br/>
+            Add a deal and run the Deal Agent to see documents appear here.
+          </p>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '16px' }}>
+          {/* Document List */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {documents.map((d: any) => (
+              <div
+                key={d.id}
+                onClick={() => setSelectedDoc(d)}
+                style={{
+                  background: selectedDoc?.id === d.id ? 'var(--color-surface-2)' : 'var(--color-surface)',
+                  border: selectedDoc?.id === d.id ? '1px solid var(--color-accent)' : '1px solid var(--color-border)',
+                  borderRadius: 12, padding: '14px', cursor: 'pointer',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                  <span style={{ fontSize: '1.1rem' }}>
+                    {d.doc_type === 'contract' ? '📋' : d.doc_type === 'proposal' ? '📝' :
+                     d.doc_type === 'invoice' ? '💰' : d.doc_type === 'report' ? '📊' :
+                     d.doc_type === 'email' ? '📧' : '📄'}
+                  </span>
+                  <Badge style={{
+                    background: 'rgba(255,87,34,0.1)', color: 'var(--color-accent)', border: 'none',
+                    fontSize: '0.65rem', textTransform: 'uppercase',
+                  }}>{d.doc_type}</Badge>
+                </div>
+                <div style={{ fontWeight: 600, fontSize: '0.82rem', marginBottom: '4px' }}>{d.title}</div>
+                <div style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)' }}>
+                  {new Date(d.created_at).toLocaleDateString()} · {new Date(d.created_at).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Document Preview */}
+          <div style={{
+            background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+            borderRadius: 12, padding: '24px', minHeight: '400px',
+          }}>
+            {selectedDoc ? (
+              <div>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '8px' }}>{selectedDoc.title}</h3>
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+                  <Badge style={{ background: 'rgba(255,87,34,0.1)', color: 'var(--color-accent)', border: 'none' }}>
+                    {selectedDoc.doc_type}
+                  </Badge>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                    Generated: {new Date(selectedDoc.created_at).toLocaleString()}
+                  </span>
+                </div>
+                <div style={{
+                  background: 'var(--color-bg)', borderRadius: 8, padding: '20px',
+                  fontSize: '0.85rem', lineHeight: 1.7, whiteSpace: 'pre-wrap',
+                  maxHeight: '500px', overflow: 'auto', border: '1px solid var(--color-border)',
+                }}>
+                  {selectedDoc.content}
+                </div>
+              </div>
+            ) : (
+              <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                height: '400px', color: 'var(--color-text-muted)', fontSize: '0.85rem',
+              }}>
+                Select a document to preview
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
