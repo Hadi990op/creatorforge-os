@@ -205,7 +205,7 @@ export default function Dashboard() {
       <style>{inputFocusStyle}</style>
 
       {/* ─── HEADER (Fixed, Kitsune nav) ─── */}
-      <header style={{
+      <header className="rsp-header" style={{
         position: 'sticky', top: 0, zIndex: 100,
         background: scrolled ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,1)',
         backdropFilter: scrolled ? 'blur(10px)' : 'none',
@@ -220,23 +220,23 @@ export default function Dashboard() {
             <div style={{ fontFamily: 'var(--font-display)', fontSize: '1.15rem', letterSpacing: '-0.02em' }}>
               Creator<span className="kit-grad-text">Forge</span>
             </div>
-            <div className="eyebrow" style={{ fontSize: '9px' }}>The Agentic OS for Creators</div>
+            <div className="eyebrow hide-mobile" style={{ fontSize: '9px' }}>The Agentic OS for Creators</div>
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+        <div className="rsp-header-status" style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
           {runningAgent && (
-            <div className="status-chip execute">
+            <div className="status-chip execute hide-mobile">
               <span className="dot" />
               {runningAgent}
             </div>
           )}
           <div className="status-chip live" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <span className="dot" />
-            <span style={{ fontSize: '11px' }}>12 agents live</span>
+            <span className="hide-mobile" style={{ fontSize: '11px' }}>12 agents live</span>
           </div>
           {stats?.llm_enabled && (
-            <span className="status-chip approved">
+            <span className="status-chip approved hide-mobile">
               <span className="dot" />
               {activeProvider || 'AI'} active
             </span>
@@ -248,7 +248,7 @@ export default function Dashboard() {
       </header>
 
       {/* ─── TABS ─── */}
-      <nav style={{
+      <nav className="rsp-tabs" style={{
         display: 'flex', gap: '0', padding: '0 32px',
         borderBottom: '1px solid var(--border)', overflowX: 'auto',
         background: 'var(--bg)',
@@ -273,7 +273,7 @@ export default function Dashboard() {
       </nav>
 
       {/* ─── MAIN ─── */}
-      <main style={{ maxWidth: 1248, margin: '0 auto', padding: 'clamp(32px, 5vw, 64px) 32px' }}>
+      <main className="rsp-main" style={{ maxWidth: 1248, margin: '0 auto', padding: 'clamp(32px, 5vw, 64px) 32px' }}>
         {tab === 'overview' && (
           <OverviewTab creator={creator} stats={stats} pending_approvals={pending_approvals} recent_activities={recent_activities} thinking={thinking} onApprove={handleApprove} onDecline={handleDecline} />
         )}
@@ -339,7 +339,7 @@ function OnboardingScreen({ onOnboarded }: { onOnboarded: () => void }) {
           <p style={{ fontSize: '0.82rem', color: 'var(--fg-3)', lineHeight: 1.7, marginBottom: '16px' }}>
             An AI-powered operating system that runs your creator business autonomously. <strong style={{ color: 'var(--fg)' }}>12 AI agents</strong> work together — researching brands, writing content, sending emails, creating invoices, and posting to your platforms.
           </p>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '0.78rem' }}>
+          <div className="rsp-onboard-2col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '0.78rem' }}>
             {[
               ['🤖', '6 Expert Agents', 'Deal, Content, Finance, Memory, Strategy, Outreach'],
               ['⚙️', '6 Worker Agents', 'Publisher, Email, Contract, Analytics, Scheduler, Notify'],
@@ -380,7 +380,7 @@ function OnboardingScreen({ onOnboarded }: { onOnboarded: () => void }) {
               <label className="eyebrow" style={{ display: 'block', marginBottom: '6px' }}>Bio</label>
               <textarea value={bio} onChange={(e) => setBio(e.target.value)} placeholder="What do you create?" rows={2} style={{ ...inputStyle, resize: 'vertical' }} />
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div className="rsp-onboard-2col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <div>
                 <label className="eyebrow" style={{ display: 'block', marginBottom: '6px' }}>Followers</label>
                 <input type="number" value={followers} onChange={(e) => setFollowers(e.target.value)} placeholder="184000" style={inputStyle} />
@@ -424,7 +424,7 @@ function OverviewTab({ creator, stats, pending_approvals, recent_activities, thi
       </div>
 
       {/* Stats grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '12px' }}>
+      <div className="rsp-stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '12px' }}>
         <StatCard label="Followers" value={stats?.followers?.toLocaleString() || '0'} icon="👥" accent="fox" />
         <StatCard label="Monthly Revenue" value={`$${(stats?.monthly_revenue || 0).toLocaleString()}`} icon="💰" accent="electric" />
         <StatCard label="Active Deals" value={stats?.active_deals || 0} icon="🤝" accent="indigo" />
@@ -440,12 +440,12 @@ function OverviewTab({ creator, stats, pending_approvals, recent_activities, thi
           <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(24px, 3vw, 36px)', marginBottom: '16px' }}>Approvals</h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {pending_approvals.map((a: any) => (
-              <div key={a.id} style={{ ...cardStyle, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px' }}>
+              <div key={a.id} className="rsp-approve-row" style={{ ...cardStyle, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px' }}>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{a.summary}</div>
                   <div style={{ fontSize: '0.78rem', color: 'var(--fg-3)', marginTop: '4px' }}>{a.details}</div>
                 </div>
-                <div style={{ display: 'flex', gap: '8px' }}>
+                <div className="rsp-approve-actions" style={{ display: 'flex', gap: '8px' }}>
                   <button onClick={() => onApprove(a.id)} className="btn-terminal" style={{ padding: '8px 16px', fontSize: '11px' }}>Approve</button>
                   <button onClick={() => onDecline(a.id)} className="btn-outline" style={{ padding: '8px 16px', fontSize: '11px' }}>Decline</button>
                 </div>
@@ -456,7 +456,7 @@ function OverviewTab({ creator, stats, pending_approvals, recent_activities, thi
       )}
 
       {/* Activity + Thinking */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', '@media (max-width: 760px)': { gridTemplateColumns: '1fr' } } as any}>
+      <div className="rsp-2col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
         {/* Recent Activity */}
         <div>
           <div className="eyebrow" style={{ marginBottom: '12px' }}>Live activity</div>
@@ -573,7 +573,7 @@ function DealsTab({ deals, onAnalyzeAll, onAnalyze, onReload }: any) {
       {showForm && (
         <div style={cardStyle}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+            <div className="rsp-3col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
               <input value={form.brand_name} onChange={(e) => setForm({ ...form, brand_name: e.target.value })} placeholder="Brand name" style={inputStyle} />
               <select value={form.brand_type} onChange={(e) => setForm({ ...form, brand_type: e.target.value })} style={inputStyle}>
                 {['tech', 'fashion', 'food', 'beauty', 'fitness', 'gaming', 'music', 'lifestyle', 'other'].map(t => <option key={t} value={t}>{t}</option>)}
@@ -582,7 +582,7 @@ function DealsTab({ deals, onAnalyzeAll, onAnalyze, onReload }: any) {
                 {['sponsorship', 'affiliate', 'product', 'ambassador', 'licensing'].map(t => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: '12px' }}>
+            <div className="rsp-2col-fixed" style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: '12px' }}>
               <input type="number" value={form.offer_amount} onChange={(e) => setForm({ ...form, offer_amount: e.target.value })} placeholder="Amount ($)" style={inputStyle} />
               <input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Deal description" style={inputStyle} />
             </div>
@@ -592,10 +592,10 @@ function DealsTab({ deals, onAnalyzeAll, onAnalyze, onReload }: any) {
       )}
 
       {/* Deal cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '16px' }}>
+      <div className="rsp-cards-340" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '16px' }}>
         {(deals || []).map((deal: any) => (
           <div key={deal.id} style={{ ...cardStyle, borderTop: `3px solid ${dealStatusColor[deal.status] || '#9aa1b1'}` }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '12px' }}>
+            <div className="rsp-deal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '12px' }}>
               <div>
                 <div style={{ fontWeight: 700, fontSize: '1rem' }}>{deal.brand_name}</div>
                 <div className="eyebrow" style={{ marginTop: '4px' }}>{deal.brand_type} \u00b7 {deal.deal_type}</div>
@@ -684,7 +684,7 @@ function ContentTab({ onReload }: { onReload: () => void }) {
         <div style={cardStyle}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Content title" style={inputStyle} />
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+            <div className="rsp-3col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
               <select value={form.platform} onChange={(e) => setForm({ ...form, platform: e.target.value })} style={inputStyle}>
                 {['instagram', 'youtube', 'tiktok', 'twitter', 'blog', 'email'].map(p => <option key={p} value={p}>{p}</option>)}
               </select>
@@ -701,7 +701,7 @@ function ContentTab({ onReload }: { onReload: () => void }) {
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
         {items.map((item: any) => (
-          <div key={item.id} style={{ ...cardStyle, display: 'flex', gap: '16px', alignItems: 'start' }}>
+          <div key={item.id} className="rsp-content-row" style={{ ...cardStyle, display: 'flex', gap: '16px', alignItems: 'start' }}>
             <div style={{ fontSize: '1.5rem' }}>{platformIcons[item.platform] || '📄'}</div>
             <div style={{ flex: 1 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
@@ -715,7 +715,7 @@ function ContentTab({ onReload }: { onReload: () => void }) {
                 </div>
               )}
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <div className="rsp-content-actions" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               {!item.draft_content && <button onClick={() => handleGenerate(item.id)} className="btn-terminal" style={{ fontSize: '10px', padding: '6px 12px' }}>Generate</button>}
               <button onClick={async () => { await fetchAPI(`/content/${item.id}/publish`, { method: 'POST' }); loadItems(); }} className="btn-outline" style={{ fontSize: '10px', padding: '6px 12px' }}>Publish</button>
             </div>
@@ -763,7 +763,7 @@ function StorefrontTab({ products, stats, onReload }: any) {
       {showForm && (
         <div style={cardStyle}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px', gap: '12px' }}>
+            <div className="rsp-2col-fixed" style={{ display: 'grid', gridTemplateColumns: '1fr 120px', gap: '12px' }}>
               <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Product name" style={inputStyle} />
               <input type="number" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} placeholder="Price ($)" style={inputStyle} />
             </div>
@@ -773,7 +773,7 @@ function StorefrontTab({ products, stats, onReload }: any) {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px' }}>
+      <div className="rsp-cards-280" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px' }}>
         {(products || []).map((p: any) => (
           <div key={p.id} style={cardStyle}>
             <div style={{ height: '120px', background: 'var(--kit-gradient)', borderRadius: 'var(--r-sm)', marginBottom: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -937,7 +937,7 @@ function AgentsTab({ activities, thinking }: any) {
       <div>
         <div className="eyebrow" style={{ marginBottom: '12px' }}>Strategic decision-makers</div>
         <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(20px, 2.5vw, 28px)', marginBottom: '16px' }}>Expert Agents</h2>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '12px' }}>
+        <div className="rsp-cards-260" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '12px' }}>
           {expertAgents.map(a => <AgentCard key={a.name} a={a} />)}
         </div>
       </div>
@@ -946,7 +946,7 @@ function AgentsTab({ activities, thinking }: any) {
       <div>
         <div className="eyebrow" style={{ marginBottom: '12px' }}>Real-world execution</div>
         <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(20px, 2.5vw, 28px)', marginBottom: '16px' }}>Worker Agents</h2>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '12px' }}>
+        <div className="rsp-cards-260" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '12px' }}>
           {workerAgents.map(a => <AgentCard key={a.name} a={a} />)}
         </div>
       </div>
@@ -982,7 +982,7 @@ function DocumentsTab({ documents, onReload }: any) {
         <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(32px, 4vw, 48px)' }}>Documents</h1>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: selected ? '1fr 1fr' : '1fr', gap: '16px' }}>
+      <div className="rsp-2col-docs" style={{ display: 'grid', gridTemplateColumns: selected ? '1fr 1fr' : '1fr', gap: '16px' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {(documents || []).map((doc: any) => (
             <div key={doc.id} onClick={() => setSelected(doc)} style={{ ...cardStyle, cursor: 'pointer', borderLeft: '3px solid var(--kit-fox)' }}>
@@ -1075,7 +1075,7 @@ function PlatformsTab() {
 
       {msg && <div style={{ padding: '10px 14px', background: 'var(--bg-sunken)', borderRadius: 'var(--r-sm)', fontSize: '0.82rem', border: '1px solid var(--border)' }}>{msg}</div>}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px' }}>
+      <div className="rsp-cards-320" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px' }}>
         {platforms.map((p) => {
           const info = platformInfo[p.platform] || { icon: '🔌', desc: p.description, fields: [], help: '' };
           return (
@@ -1177,7 +1177,7 @@ function ProvidersTab({ providers, activeProvider, keyProvider, setKeyProvider, 
       </div>
 
       {/* Provider list */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '12px' }}>
+      <div className="rsp-cards-280" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '12px' }}>
         {providers.map((p: LLMProvider) => (
           <div key={p.name} style={{ ...cardStyle, borderColor: p.enabled ? 'var(--kit-fox)' : 'var(--border)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>

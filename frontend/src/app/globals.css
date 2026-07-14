@@ -434,10 +434,279 @@ h3, h4, h5, h6 {
   color: var(--kit-fox);
 }
 
-/* Responsive */
-@media (max-width: 1100px) {
-  :root { --fs-display-1: clamp(48px, 7vw, 96px); }
+/* ═══════════════════════════════════════
+   RESPONSIVE UTILITY CLASSES
+   ═══════════════════════════════════════ */
+
+/* Mobile-first: these classes make layouts responsive
+   by overriding inline styles at breakpoints.
+   Usage: add className="rsp-<name>" alongside inline styles. */
+
+/* Hide on mobile */
+.hide-mobile { display: none; }
+@media (min-width: 761px) { .hide-mobile { display: flex; } }
+
+/* Hide on desktop, show on mobile */
+.show-mobile { display: none; }
+@media (max-width: 760px) { .show-mobile { display: flex; } }
+
+/* ─── Header ─── */
+.rsp-header {
+  padding-left: 32px;
+  padding-right: 32px;
 }
+.rsp-header-status {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+/* ─── Tabs ─── */
+.rsp-tabs {
+  padding-left: 32px;
+  padding-right: 32px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.rsp-tabs::-webkit-scrollbar { display: none; }
+
+/* ─── Main content ─── */
+.rsp-main {
+  padding-left: 32px;
+  padding-right: 32px;
+}
+
+/* ─── Two-column → one-column ─── */
+.rsp-2col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+.rsp-2col-docs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+/* ─── Three-column → stacked ─── */
+.rsp-3col {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px;
+}
+
+/* ─── Two-column with fixed second ─── */
+.rsp-2col-fixed {
+  display: grid;
+  grid-template-columns: 1fr 120px;
+  gap: 12px;
+}
+.rsp-2col-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+/* ─── Approval card row → column ─── */
+.rsp-approve-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.rsp-approve-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* ─── Deal card row ─── */
+.rsp-deal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 12px;
+}
+
+/* ─── Content item row ─── */
+.rsp-content-row {
+  display: flex;
+  gap: 16px;
+  align-items: start;
+}
+.rsp-content-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* ─── Onboarding grid ─── */
+.rsp-onboard-2col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+/* ─── Stat grid (auto-fill is already responsive, but cap minmax on mobile) ─── */
+.rsp-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+/* ─── Card grids with various minmax ─── */
+.rsp-cards-340 {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 16px;
+}
+.rsp-cards-320 {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+}
+.rsp-cards-280 {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+.rsp-cards-260 {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+/* ═══════════════════════════════════════
+   BREAKPOINT: 1100px (tablet)
+   ═══════════════════════════════════════ */
+@media (max-width: 1100px) {
+  :root {
+    --fs-display-1: clamp(48px, 7vw, 96px);
+  }
+  .rsp-cards-340 { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+  .rsp-cards-320 { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+}
+
+/* ═══════════════════════════════════════
+   BREAKPOINT: 760px (mobile)
+   ═══════════════════════════════════════ */
 @media (max-width: 760px) {
-  :root { --fs-display-1: clamp(40px, 9vw, 64px); --fs-display-2: clamp(32px, 6vw, 48px); }
+  :root {
+    --fs-display-1: clamp(40px, 9vw, 64px);
+    --fs-display-2: clamp(32px, 6vw, 48px);
+  }
+
+  /* Header: shrink padding, hide verbose status */
+  .rsp-header {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  .rsp-header-status {
+    gap: 8px;
+  }
+  .hide-mobile { display: none !important; }
+
+  /* Tabs: tighter padding */
+  .rsp-tabs {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  /* Main: less padding */
+  .rsp-main {
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+
+  /* Two-column → single column */
+  .rsp-2col,
+  .rsp-2col-docs,
+  .rsp-2col-fixed,
+  .rsp-2col-form {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Three-column → single column */
+  .rsp-3col {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Onboarding grid → single */
+  .rsp-onboard-2col {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Approval: stack vertically */
+  .rsp-approve-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  .rsp-approve-actions {
+    justify-content: flex-end;
+  }
+
+  /* Deal header: stack */
+  .rsp-deal-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  /* Content item: stack */
+  .rsp-content-row {
+    flex-direction: column;
+    gap: 12px;
+  }
+  .rsp-content-actions {
+    flex-direction: row;
+    justify-content: flex-start;
+  }
+
+  /* Card grids → single column */
+  .rsp-cards-340,
+  .rsp-cards-320,
+  .rsp-cards-280,
+  .rsp-cards-260 {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Stat grid → 2 columns */
+  .rsp-stat-grid {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 10px;
+  }
+}
+
+/* ═══════════════════════════════════════
+   BREAKPOINT: 480px (small phone)
+   ═══════════════════════════════════════ */
+@media (max-width: 480px) {
+  .rsp-header { padding-left: 12px; padding-right: 12px; }
+  .rsp-tabs { padding-left: 12px; padding-right: 12px; }
+  .rsp-main {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+
+  /* Stat grid → single column on tiny screens */
+  .rsp-stat-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Status chips: hide text, show dot only */
+  .rsp-header-status .status-chip {
+    padding: 4px 8px;
+    font-size: 0;
+  }
+  .rsp-header-status .status-chip .dot {
+    width: 8px;
+    height: 8px;
+  }
+
+  /* Tab buttons: tighter */
+  .rsp-tabs button {
+    padding: 10px 12px !important;
+    font-size: 0.8rem !important;
+  }
 }
